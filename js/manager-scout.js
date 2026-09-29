@@ -3,13 +3,15 @@
 // ctx = { season, team, teamFile, teams }. Read-only: nothing here saves anything.
 
 import { kickoff, status, finished, ladder, resultFor, winChance, playerTotals, byKickoff } from './data.js';
-import { esc, logo, safeColour, onColour, fmtDate, fmtTime, matchUrl } from './ui.js';
+import { esc, logo, safeColour, onColour, fmtDate, fmtTime, matchUrl, parseStamp } from './ui.js';
 import { FORMATIONS, TACTICS, PRESETS, squadOf, normaliseTeamFile, loadTeamFile } from './managers.js';
 import { suspensions, isKnockout, STAGE_NAMES } from './league.js';
 
-// This module's own styles, added once to whichever page loads it.
+// This module's own styles, added once to whichever page loads it (same ?v= as this file).
 if (!document.querySelector('link[data-scout-css]')) {
-  document.head.insertAdjacentHTML('beforeend', `<link rel="stylesheet" data-scout-css href="${new URL('../css/manager-scout.css', import.meta.url)}">`);
+  const css = new URL('../css/manager-scout.css', import.meta.url);
+  css.search = new URL(import.meta.url).search;
+  document.head.insertAdjacentHTML('beforeend', `<link rel="stylesheet" data-scout-css href="${css}">`);
 }
 
 const fileCache = new Map();   // code -> Promise of raw team file (or null)
@@ -96,7 +98,7 @@ export async function scoutPane(pane, ctx) {
     <div class="ln" style="left:22%;right:22%;bottom:0;height:16%;border-bottom:0"></div><div class="ln" style="left:36%;right:36%;bottom:0;height:6%;border-bottom:0"></div>
     <div class="ln" style="left:22%;right:22%;top:0;height:16%;border-top:0"></div><div class="ln" style="left:36%;right:36%;top:0;height:6%;border-top:0"></div>`;
   const xi = `<section class="card stack" style="gap:12px"><h2 class="card-title">${announced ? 'Announced line-up' : 'Predicted line-up'} · ${esc(file.formation)}</h2>
-    <p class="muted" style="margin:0;font-size:.8rem">${announced ? `Set by their manager${raw.updated ? ` on ${esc(fmtDate(new Date(raw.updated)))}` : ''}. It can still change before kick-off.` : 'Their manager hasn’t picked a team yet, so this is their strongest XI on paper.'}</p>
+    <p class="muted" style="margin:0;font-size:.8rem">${announced ? `Set by their manager${raw.updated ? ` on ${esc(fmtDate(parseStamp(raw.updated)))}` : ''}. It can still change before kick-off.` : 'Their manager hasn’t picked a team yet, so this is their strongest XI on paper.'}</p>
     <div class="pitch2d" style="max-width:380px">${lines}${pitch}</div>
     ${out.length ? `<p style="margin:0;font-size:.85rem"><b style="color:var(--loss)">Suspended for your match:</b> ${out.map(s => `${esc(s.name || P[s.player]?.name)} <span class="muted">(${esc(s.reason)})</span>`).join(', ')}</p>` : ''}</section>`;
 
