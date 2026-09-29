@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Heineken C League S3</title>
-  <meta name="description" content="Fixtures, results and live matches for Heineken C League Season 3.">
+  <title>League Table | HCL S3</title>
+  <meta name="description" content="The Heineken C League Season 3 table and top scorers.">
   <meta name="theme-color" content="#0f1115">
   <link rel="icon" type="image/png" href="assets/league/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="css/styles.css">
-  <script type="module" src="js/home.js"></script>
+  <script type="module" src="js/table.js"></script>
   <script type="module" src="js/updates.js"></script>
 </head>
 <body>
@@ -19,8 +19,8 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html"><img src="assets/league/logo.png" alt="" onerror="this.remove()"><span><b><span class="long">Heineken C League</span><span class="short">HCL</span></b><small id="season-label">Season 3</small></span></a>
       <nav class="nav" aria-label="Site">
-        <a href="index.html" aria-current="page">Matches</a>
-        <a href="table.html">Table</a>
+        <a href="index.html">Matches</a>
+        <a href="table.html" aria-current="page">Table</a>
         <a href="press.html">Press</a>
         <a href="awards.html">Awards</a>
       </nav>
@@ -29,23 +29,27 @@
   </header>
 
   <div class="app">
-    <section class="hero">
-      <div class="hero-text">
-        <p class="eyebrow" id="hero-eyebrow">Season 3</p>
-        <h1>Heineken C League</h1>
-        <p id="hero-status">Loading matches…</p>
-        <div class="hero-facts" id="hero-facts"></div>
-      </div>
-      <img class="hero-logo" src="assets/league/logo.png" alt="" onerror="this.remove()">
-    </section>
+    <header class="page-head"><p class="eyebrow" id="season-label">Season 3</p><h1>League table</h1><p id="table-sub">Updated after every full-time whistle.</p></header>
 
-    <div class="notice" id="notice" hidden></div>
+    <div class="layout">
+      <section class="card" id="table">
+        <h2 class="card-title">Standings <span id="games-played"></span></h2>
+        <div class="table-wrap">
+          <table class="ladder ladder-full">
+            <thead><tr><th>#</th><th class="t">Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th class="gfga">GF</th><th class="gfga">GA</th><th>GD</th><th>Pts</th><th class="form">Form</th></tr></thead>
+            <tbody id="ladder-body"><tr><td colspan="11"><div class="loading"><div class="spinner"></div>Loading…</div></td></tr></tbody>
+          </table>
+        </div>
+        <p class="legend" id="legend">Top 4 (above the dashed line) qualify for the finals. ▲▼ shows movement since last week.</p>
+      </section>
 
-    <section class="card" id="fixtures">
-      <h2 class="card-title">Fixtures &amp; results</h2>
-      <div class="tabs" id="week-tabs" role="tablist" aria-label="Week"></div>
-      <div class="match-list" id="week-list" role="tabpanel"><div class="loading"><div class="spinner"></div>Loading matches…</div></div>
-    </section>
+      <aside class="stack">
+        <section class="card">
+          <h2 class="card-title">Top scorers <a href="awards.html">All awards →</a></h2>
+          <div class="mini-list" id="scorers"></div>
+        </section>
+      </aside>
+    </div>
 
     <footer class="site-footer">
       <span>Heineken C League · Season 3 <span id="updated"></span> · <a href="manager.html">Manager login</a> · <a href="admin.html">Admin</a></span>

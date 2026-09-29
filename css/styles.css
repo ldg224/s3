@@ -219,6 +219,12 @@ button, input, select { font: inherit; color: inherit; }
 .ladder tbody tr:nth-child(-n+4) .pos { color: var(--brand); }
 .ladder td:first-child { box-shadow: inset 3px 0 0 var(--tc, transparent); }
 .ladder .form { display: none; }
+.ladder .gfga { display: none; }
+/* The Table page has room for goals for/against, form and full names. */
+@media (min-width: 620px) {
+  .ladder-full .form, .ladder-full .gfga { display: table-cell; }
+  .ladder-full .t small { max-width: none; }
+}
 .form-dots { display: flex; gap: 3px; justify-content: center; }
 .form-dots i { width: 18px; height: 18px; border-radius: 5px; font-style: normal; font-size: .62rem; font-weight: 900; display: grid; place-items: center; color: #0f1115; }
 .form-dots .W { background: var(--final); } .form-dots .D { background: #4b5563; color: #fff; } .form-dots .L { background: var(--loss); color: #fff; }

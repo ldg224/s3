@@ -165,7 +165,7 @@ function overviewPane(pane) {
       <div class="todo">${todo.map(t => `<button class="todo-row ${t.ok ? 'ok' : ''}" ${t.go ? `data-go="${t.go}"` : 'disabled'}><span class="tick">${t.ok ? '✓' : '!'}</span><span>${esc(t.text)}</span>${t.go ? '<span class="arrow">›</span>' : ''}</button>`).join('')}</div></section>
     <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">League position</h2>
       ${row ? `<div class="big-stat"><div><b>${row.p ? ord(row.rank) : '–'}</b><span>Position</span></div><div><b>${row.pts}</b><span>Points</span></div><div><b>${row.w}-${row.d}-${row.l}</b><span>W-D-L</span></div><div><b>${row.gd > 0 ? '+' : ''}${row.gd}</b><span>Goal diff</span></div></div>` : ''}
-      <div class="chips"><a class="btn small" href="index.html#table">Full table</a></div></section>
+      <div class="chips"><a class="btn small" href="table.html">Full table</a></div></section>
     <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Last result</h2>${lastHtml}<div class="chips"><button class="btn small" data-go="reports">All match reports</button></div></section>
   </div>`;
   pane.onclick = e => { const g = e.target.closest('[data-go]'); if (g) { tab = g.dataset.go; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };

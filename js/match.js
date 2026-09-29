@@ -32,7 +32,7 @@ function scoreboard() {
   const lad = ladder(S, finished(S));
   const rank = c => lad.find(r => r.team.code === c && r.p > 0)?.rank;
   const ord = n => n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10 * (Math.floor(n / 10) % 10 !== 1)] || 'th');
-  const side = t => `<a class="sb-team" href="index.html#table">${logo(t, 88)}
+  const side = t => `<a class="sb-team" href="table.html">${logo(t, 88)}
     <span class="sb-name">${esc(t.name)}</span>${t.manager ? `<span class="sb-manager">${esc(t.manager)}</span>` : ''}${rank(t.code) ? `<span class="chip">${ord(rank(t.code))} on ladder</span>` : ''}</a>`;
   const clock = st === 'live' ? `<span class="sb-clock" id="sb-clock">${clockAt(FX.result.periods, liveSimTime(FX, S))}</span>` : '';
   const cd = st === 'upcoming' && k ? `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>` : '';
