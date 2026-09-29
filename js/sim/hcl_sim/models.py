@@ -10,7 +10,7 @@ class Player:
     id: str
     name: str
     team: str
-    position: str            # GK / DEF / MID / FWD (from the sheet)
+    position: str            # GK / DEF / MID / FWD
     attrs: dict
     slot: str = ''           # formation slot, e.g. LB, CDM, ST
     line: str = ''           # GK / DEF / MID / AM / FWD

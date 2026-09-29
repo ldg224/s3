@@ -4,10 +4,13 @@ These tests don't need the internet: they build a small synthetic league.
 The full-match tests take about a minute.
 """
 
+import json
 import math
+import os
+import tempfile
 import unittest
 
-from hcl_sim import physics, ratings, sheet
+from hcl_sim import physics, ratings, season, teams
 from hcl_sim.run import simulate
 from hcl_sim.validate import validate
 
@@ -55,14 +58,31 @@ class Physics(unittest.TestCase):
         self.assertLess(ball.x, 80)
 
 
-class SheetParsing(unittest.TestCase):
-    def test_formats(self):
-        self.assertEqual(sheet.bracket_code('[TUR] FC Turtle'), 'TUR')
-        self.assertEqual(sheet.bracket_code('Lucky FC'), 'Lucky FC')
-        self.assertEqual(sheet.to_number('(9) Nine'), 9)
-        self.assertEqual(sheet.to_number('$7,800.00'), 7800)
-        self.assertIsNone(sheet.to_number(''))
-        self.assertEqual(sheet.header_key('GOAL 1 MIN'), 'goal_1_min')
+class SeasonData(unittest.TestCase):
+    def test_load_season_and_manager_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, 'teams'))
+            data = {'teams': [{'code': 'AAA', 'name': 'Alpha FC'}, {'code': 'BBB', 'name': 'Beta'}],
+                    'players': [{'id': '1', 'name': 'Keeper', 'team': 'AAA', 'position': 'gk', 'offense': 0, 'defense': '7'},
+                                {'id': '2', 'name': 'Free agent', 'team': '', 'offense': 5, 'defense': 5}],
+                    'fixtures': [{'id': 'w1-aaa-bbb', 'week': 1, 'home': 'AAA', 'away': 'BBB'},
+                                 {'id': 'gf', 'stage': 'GF', 'home': None, 'away': None}]}
+            with open(os.path.join(d, 'season.json'), 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+            with open(os.path.join(d, 'teams', 'aaa.json'), 'w', encoding='utf-8') as f:
+                json.dump({'formation': '4-4-2', 'tactics': {'tempo': 1.5}, 'captain': '1', 'penalties': '99'}, f)
+            league = season.load_season(os.path.join(d, 'season.json'))
+        self.assertEqual(list(league['players']), ['1'])            # free agents are left out
+        p = league['players']['1']
+        self.assertEqual((p['position'], p['offense'], p['defense']), ('GK', 5, 7))   # like JS `Number(v) || 5`
+        self.assertEqual(league['tactics']['AAA'], {'formation': '4-4-2', 'tempo': 1.0, 'captain': '1'})
+        self.assertEqual([fx['id'] for fx in league['schedule']], ['w1-aaa-bbb'])     # undecided finals skipped
+        self.assertEqual(teams.resolve_team(league, 'alpha fc'), 'AAA')
+        self.assertEqual(season.playable(league, min_players=1), ['AAA'])
+
+    def test_site_season_loads(self):
+        league = season.load_season()
+        self.assertTrue(season.playable(league))
 
 
 class Ratings(unittest.TestCase):

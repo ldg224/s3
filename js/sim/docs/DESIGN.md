@@ -114,15 +114,15 @@ possession changes):
 
 ## Ratings
 
-The sheet rates players offense/defense 1-10. The engine needs more detail, so each player
+Players are rated offense/defense 1-10 in `data/season.json`. The engine needs more detail, so each player
 gets 25 attributes (1-100): pace, acceleration, stamina, strength, agility, passing, vision,
 first touch, dribbling, crossing, finishing, long shots, heading, tackling, marking,
 positioning, composure, decisions, work rate, aggression, and for keepers reflexes,
 handling, positioning, diving and kicking.
 
-Attributes are derived from the two sheet ratings and position, with a small fixed
-variation per player so they have character. Any attribute can be overridden from an
-optional **Attributes** tab (export a starting point with `ratings-template`). The 1-10 scale
+Attributes are derived from the two ratings and position, with a small fixed
+variation per player so they have character. Any attribute can be overridden through
+the league's `attributes` map (player id -> {attribute: value}); nothing fills it yet. The 1-10 scale
 is deliberately compressed (1 -> 45, 10 -> 90): small attribute gaps compound over hundreds of
 actions, and a wider scale made strong teams unrealistically dominant.
 

@@ -9,7 +9,7 @@ import math
 from .config import PITCH_LENGTH, PITCH_WIDTH, BOX_DEPTH, CENTRE_CIRCLE
 from .geometry import clamp, dist, unit
 
-# slot: (line, y_base, x_adjust, wanted sheet position)
+# slot: (line, y_base, x_adjust, wanted player position)
 FORMATIONS = {
     '4-3-3': {
         'GK': ('GK', 34, 0, 'GK'),

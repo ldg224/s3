@@ -1,6 +1,6 @@
 """Player attribute model.
 
-The sheet currently rates players with two numbers (offense and defense, 1-10). The engine
+The league currently rates players with two numbers (offense and defense, 1-10). The engine
 needs more detail, so each player gets a full attribute profile on a 1-100 scale:
 
 * If the Attributes tab has a value for an attribute, it is used as-is.
@@ -63,7 +63,7 @@ def _scale(rating):
 
 
 def derive(player, overrides=None):
-    """Full attribute dict (1-100) for a sheet player."""
+    """Full attribute dict (1-100) for a league player."""
     pos = player.get('position') or 'MID'
     off = _scale(player.get('offense'))
     dfn = _scale(player.get('defense'))

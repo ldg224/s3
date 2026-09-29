@@ -35,7 +35,7 @@ substitutes, so the target is a little higher than the real-world 52-62.
 providers count only clear "reads" of a pass, so this will always read higher.
 
 Scorelines were varied and realistic (most common: 2-1, 0-1, 2-0, 1-1, 4-0, 0-0), and team
-strength followed the sheet ratings (SKS and FC Turtle strongest; Lads United, who have
+strength followed the player ratings (SKS and FC Turtle strongest; Lads United, who have
 only 10 players on the roster, weakest).
 
 ## Known gaps / next tuning targets

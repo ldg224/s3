@@ -11,6 +11,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 
 from .run import simulate
+from .season import playable
 from .validate import validate
 
 # (label, key, low, high) per team per match unless noted
@@ -44,7 +45,7 @@ def _one(job):
 
 
 def run_calibration(league, n, workers=0):
-    codes = sorted(league['teams'])
+    codes = playable(league)   # teams with enough players
     pairs = list(itertools.permutations(codes, 2))
     rng = random.Random(7)
     jobs = [(league, *pairs[i % len(pairs)], rng.randrange(1 << 30)) for i in range(n)]

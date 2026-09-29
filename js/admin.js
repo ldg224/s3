@@ -83,7 +83,7 @@ async function commit(files, deletions, message, onStep) {
 // ---------- UI shell ----------
 
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
-let toggle, panel;
+let panel;
 
 function pendingCount() {
   if (!draft || !base) return 0;
@@ -91,13 +91,6 @@ function pendingCount() {
 }
 const strip = s => ({ ...s, updated: null });
 
-function updateToggle() {
-  if (!toggle) return;
-  const n = pendingCount();
-  toggle.classList.toggle('on', !!token);
-  const dot = { saving: '⏳', live: '✓', failed: '⚠' }[liveState] || '';
-  toggle.innerHTML = token ? `✎ Edit mode${n ? ` <span class="badge">${n}</span>` : dot ? ` <span class="state">${dot}</span>` : ''}` : 'Editor login';
-}
 
 function modal(html) {
   const m = el(`<div class="ed-modal" role="dialog" aria-modal="true"><div class="ed-box">${html}</div></div>`);
@@ -167,13 +160,12 @@ async function startEditing() {
     base = structuredClone(await loadSeason(true)); // fresh copy, not the one the page loaded earlier
     draft = structuredClone(base);
   }
-  updateToggle();
   openPanel();
 }
 
 function openPanel() {
   if (!panel) {
-    panel = el(`<section class="ed-panel full" aria-label="League editor">
+    panel = el(`<section class="ed-panel" aria-label="League editor">
       <div class="ed-head"><h2>League admin</h2><span class="ed-pending"></span>
         <button class="ed-btn primary" data-publish>Publish now</button><button class="ed-btn" data-discard>Discard</button>
         <a class="ed-btn" href="index.html" target="_blank" rel="noopener">View site ↗</a>
@@ -226,7 +218,6 @@ function refresh() {
   body.onclick = null;
   body.oninput = null;
   ({ fixtures: fixturesTab, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, league: leagueTabHost, history: historyTab, settings: settingsTab })[tab](body);
-  updateToggle();
   // Show edits on the page immediately (only when something actually changed).
   const sig = JSON.stringify(draft) + uploads.size;
   if (sig !== refresh.sig) {
@@ -1036,7 +1027,7 @@ const AUTO_DELAY = 4000;
 let publishing = false, autoTimer = null, autoBlocked = false; // blocked after a conflict until 'Publish now'
 let liveState = '', liveMsg = '';   // '', 'saving', 'live', 'failed'
 
-function setState(state, msg) { liveState = state; liveMsg = msg; if (panel) showState(); updateToggle(); }
+function setState(state, msg) { liveState = state; liveMsg = msg; if (panel) showState(); }
 function showState() {
   const box = panel.querySelector('.ed-pending'), n = pendingCount();
   if (publishing || liveState === 'saving' || liveState === 'failed') box.innerHTML = liveMsg;

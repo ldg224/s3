@@ -13,7 +13,6 @@ export async function loadSeason(force = false) {
   return season;
 }
 export function setSeason(s) { season = s; }
-export function getSeason() { return season; }
 
 export const teamMap = s => Object.fromEntries(s.teams.map(t => [t.code, t]));
 
@@ -126,9 +125,6 @@ export function resultFor(f, code) {
   const mine = f.home === code ? f.result.home : f.result.away;
   const theirs = f.home === code ? f.result.away : f.result.home;
   return mine > theirs ? 'W' : mine < theirs ? 'L' : 'D';
-}
-export function nextMatch(s, code, after) {
-  return s.fixtures.filter(f => (f.home === code || f.away === code) && kickoff(f) && kickoff(f) > after).sort(byKickoff)[0] || null;
 }
 
 // Poisson model from goals scored/conceded so far (same approach as Season 2).

@@ -34,9 +34,6 @@ function start() {
   return readyPromise;
 }
 
-// Resolves once the engine has loaded (starts loading it if it hasn't yet).
-export function simulatorReady() { return start(); }
-
 // Checks a team has a full squad the engine can play; throws a readable error if not.
 function checkSquad(season, code) {
   const team = season.teams.find(t => t.code === code);

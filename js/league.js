@@ -23,7 +23,6 @@ export function removeAdjustment(season, id) {
   season.adjustments = (season.adjustments || []).filter(a => a.id !== id);
   return season.adjustments.length !== before;
 }
-export const adjustmentTotal = (season, team) => (season.adjustments || []).filter(a => a.team === team).reduce((n, a) => n + a.points, 0);
 
 // ---------------------------------------------------------------- rescheduling
 

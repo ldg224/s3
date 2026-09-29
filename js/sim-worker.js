@@ -4,7 +4,7 @@
 importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');
 
 const ENGINE_FILES = ['__init__', 'config', 'geometry', 'physics', 'models', 'ratings', 'tactics',
-  'decisions', 'engine', 'output', 'validate', 'teams', 'sheet', 'run'];
+  'decisions', 'engine', 'output', 'validate', 'teams', 'run'];
 
 const BRIDGE = `
 import sys, json

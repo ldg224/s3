@@ -1,4 +1,4 @@
-"""Builds engine teams from the league sheet."""
+"""Builds engine teams from the league data (see js/simulate.js toLeague, or season.py)."""
 
 from . import ratings, tactics
 from .models import Player, Team
@@ -39,3 +39,14 @@ def build_team(league, code):
     tac_clean = {k: v / 100 if v > 1 else v for k, v in tac.items() if isinstance(v, (int, float))}
     return Team(code=code, name=info['name'], colour=info['colour'], players=starters, formation=formation, tactics=tac_clean,
                 takers=takers, captain=captain if any(str(p.id) == captain for p in starters) else '')
+
+
+def resolve_team(league, value):
+    """Accepts a team code or full name."""
+    v = (value or '').strip()
+    if v.upper() in league['teams']:
+        return v.upper()
+    for code, t in league['teams'].items():
+        if t['name'].upper() == v.upper():
+            return code
+    raise KeyError(f'Unknown team: {value}')
