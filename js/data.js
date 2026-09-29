@@ -1,7 +1,7 @@
 // Loads the season's sheet tabs and turns them into teams, fixtures and a ladder.
 // Columns are matched by header name, so sheet columns can be reordered or added freely.
 
-import { SEASON, SOURCES, POINTS, LIVE_WINDOW_MINUTES } from './config.js';
+import { SEASON, SOURCES, POINTS, LADDER, LIVE_WINDOW_MINUTES } from './config.js';
 
 const CACHE_PREFIX = `hcl-s${SEASON.number}:`;
 const FALLBACK_COLOUR = '#9ca3af';
@@ -97,6 +97,32 @@ export function parseKickoff(dateStr, timeStr) {
 const toScore = v => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 export const safeColour = c => (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c || '') ? c : FALLBACK_COLOUR);
 
+// First non-empty value among several possible column names, so the site accepts
+// the league sheet's headers ("TEAM CODE") as well as short ones ("Code").
+const pick = (r, ...keys) => keys.map(k => r[k]).find(v => v) || '';
+
+// "[TUR] FC Turtle" -> "TUR", "[FWD] Forward" -> "FWD"; plain values are returned as-is.
+export const bracketCode = v => (String(v || '').match(/^\s*\[([^\]]+)\]/) || [])[1]?.trim() || String(v || '').trim();
+
+// "(9) Nine" -> 9, "$7,800.00" -> 7800, "8" -> 8
+export const toNumber = v => {
+  const s = String(v || '');
+  const n = Number((s.match(/^\s*\((-?[\d.]+)\)/) || [])[1] ?? s.replace(/[^0-9.-]/g, ''));
+  return s.trim() === '' || Number.isNaN(n) ? null : n;
+};
+
+// Reads the "GOAL 1 MIN / GOAL 1 ID" column pairs. Any number of pairs works,
+// so a high-scoring match just needs more columns added to the sheet.
+function goalsFrom(r) {
+  const goals = [];
+  for (let n = 1; `goal_${n}_min` in r || `goal_${n}_id` in r; n++) {
+    const playerId = r[`goal_${n}_id`];
+    if (!playerId) continue;
+    goals.push({ minute: toNumber(r[`goal_${n}_min`]), playerId });
+  }
+  return goals.sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+}
+
 // Works out a fixture's state. The STATUS column is only needed for exceptions
 // (postponed, cancelled, or forcing "live"); normally entering the score is enough.
 function fixtureState(f, now) {
@@ -112,13 +138,13 @@ function fixtureState(f, now) {
 export function buildTeams(rows) {
   const teams = new Map();
   for (const r of rows) {
-    if (!r.code) continue;
-    const code = r.code.toUpperCase();
+    const code = pick(r, 'team_code', 'code').toUpperCase();
+    if (!code) continue;
     teams.set(code, {
       code,
-      name: r.name || code,
-      colour: safeColour(r.colour || r.color),
-      manager: r.manager || '',
+      name: pick(r, 'team_name', 'name') || code,
+      colour: safeColour(pick(r, 'primary_hex_code', 'colour', 'color')),
+      manager: pick(r, 'manager_name', 'manager'),
       logo: r.logo || `assets/teams/${code.toLowerCase()}.png`,
       logoAlt: r.logo_alt || `assets/teams/${code.toLowerCase()}-alt.png`,
     });
@@ -132,12 +158,12 @@ export function buildFixtures(rows, teams, now = new Date()) {
     lookup.set(t.code, t);
     lookup.set(t.name.toUpperCase(), t);
   }
-  const team = v => lookup.get((v || '').trim().toUpperCase())
+  const team = v => lookup.get(bracketCode(v).toUpperCase()) || lookup.get((v || '').trim().toUpperCase())
     || { code: v || '', name: v || 'TBA', colour: FALLBACK_COLOUR, logo: '', unknown: true };
 
-  return rows.map((r, i) => {
+  return rows.filter(r => r.home || r.away).map((r, i) => {
     const f = {
-      id: r.id || String(i + 1),
+      id: r.id || r.match_id || String(i + 1),
       week: Number(r.week) || null,
       date: r.date,
       time: r.time,
@@ -148,7 +174,8 @@ export function buildFixtures(rows, teams, now = new Date()) {
       awayScore: toScore(r.away_score),
       status: r.status || '',
       venue: r.venue || '',
-      video: r.video || '',
+      video: pick(r, 'youtube_link', 'video'),
+      goals: goalsFrom(r),
     };
     f.state = fixtureState(f, now);
     return f;
@@ -203,9 +230,61 @@ export function currentWeek(fixtures) {
   return last ? last.week : (fixtures.find(f => f.week)?.week ?? 1);
 }
 
+export function buildPlayers(rows) {
+  const players = new Map();
+  for (const r of rows) {
+    const id = pick(r, 'player_id', 'id');
+    if (!id) continue;
+    players.set(id, {
+      id,
+      name: pick(r, 'player_name', 'name'),
+      team: bracketCode(pick(r, 'assigned_team', 'team')).toUpperCase(),
+      position: bracketCode(r.position).toUpperCase(),
+      offense: toNumber(pick(r, 'offense_rating', 'offense')),
+      defense: toNumber(pick(r, 'defense_rating', 'defense')),
+      weeklyCost: toNumber(r.weekly_cost),
+    });
+  }
+  return players;
+}
+
+// Ladder straight from the sheet's Standings tab (only its first table; rows without a
+// position and team are ignored). Form still comes from results, since the tab has none.
+export function sheetStandings(rows, teams, calculated) {
+  const formByCode = new Map(calculated.map(r => [r.team.code, r.form]));
+  const lookup = new Map([...teams.values()].flatMap(t => [[t.code, t], [t.name.toUpperCase(), t]]));
+  return rows
+    .filter(r => toNumber(r.position) !== null && r.team)
+    .map(r => {
+      const team = lookup.get(bracketCode(r.team).toUpperCase()) || lookup.get(r.team.toUpperCase())
+        || { code: r.team, name: r.team, colour: FALLBACK_COLOUR, logo: '', unknown: true };
+      return {
+        team,
+        rank: toNumber(r.position),
+        played: toNumber(r.played) ?? 0,
+        won: toNumber(r.won) ?? 0,
+        drawn: toNumber(pick(r, 'draw', 'drawn')) ?? 0,
+        lost: toNumber(pick(r, 'loss', 'lost')) ?? 0,
+        gf: toNumber(r.gf) ?? 0,
+        ga: toNumber(r.ga) ?? 0,
+        gd: toNumber(r.gd) ?? 0,
+        points: toNumber(r.points) ?? 0,
+        form: formByCode.get(team.code) || [],
+      };
+    })
+    .sort((a, b) => a.rank - b.rank);
+}
+
 export async function loadSeason() {
-  const [teamRows, fixtureRows] = await Promise.all([loadSource('teams'), loadSource('fixtures')]);
+  const useSheetLadder = LADDER === 'sheet' && SOURCES.standings;
+  const [teamRows, fixtureRows, standingRows] = await Promise.all([
+    loadSource('teams'),
+    loadSource('fixtures'),
+    useSheetLadder ? loadSource('standings') : null,
+  ]);
   const teams = buildTeams(teamRows);
   const fixtures = buildFixtures(fixtureRows, teams);
-  return { teams, fixtures, standings: buildStandings(teams, fixtures) };
+  const calculated = buildStandings(teams, fixtures);
+  const standings = useSheetLadder ? sheetStandings(standingRows, teams, calculated) : calculated;
+  return { teams, fixtures, standings };
 }

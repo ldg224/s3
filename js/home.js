@@ -35,20 +35,26 @@ function renderNextMatch(fixtures) {
   const next = fixtures
     .filter(f => f.state === 'upcoming')
     .sort((a, b) => a.kickoff - b.kickoff)[0];
-  const f = live[0] || next;
+  // Between rounds or after the season, feature the most recent result instead.
+  const latest = fixtures
+    .filter(x => x.state === 'result' && x.kickoff)
+    .sort((a, b) => b.kickoff - a.kickoff)[0];
+  const f = live[0] || next || latest;
 
   if (!f) {
-    mount.innerHTML = '<p class="muted">No upcoming matches scheduled.</p>';
+    mount.innerHTML = '<p class="muted">No matches scheduled yet.</p>';
     return;
   }
 
+  const label = { live: '<span class="live-dot"></span>Live now', upcoming: 'Next match', result: 'Latest result' }[f.state];
+  const showScore = f.homeScore !== null && (f.state === 'live' || f.state === 'result');
+
   mount.innerHTML = `
-    <p class="eyebrow">${f.state === 'live' ? '<span class="live-dot"></span>Live now' : 'Next match'}
-      · Week ${esc(f.week ?? '?')}</p>
+    <p class="eyebrow">${label} · Week ${esc(f.week ?? '?')}</p>
     <div class="feature">
       <div class="feature-team">${teamBadge(f.home, 72)}<span>${esc(f.home.name)}</span></div>
       <div class="feature-mid">
-        <span class="feature-vs">${f.state === 'live' && f.homeScore !== null ? `${f.homeScore} – ${f.awayScore}` : 'vs'}</span>
+        <span class="feature-vs">${showScore ? `${f.homeScore} – ${f.awayScore}` : 'vs'}</span>
         <span class="muted">${esc(formatDate(f.kickoff))} · ${esc(formatTime(f.kickoff))}</span>
         ${f.state === 'upcoming' ? `<span class="countdown" data-kickoff="${f.kickoff.getTime()}">${countdownText(f.kickoff)}</span>` : ''}
       </div>
@@ -130,7 +136,10 @@ function tickCountdowns() {
 
 async function init() {
   $('#season-label').textContent = `Season ${SEASON.number}`;
-  if (SEASON.sampleData) $('#preview-banner').hidden = false;
+  if (SEASON.notice) {
+    $('#preview-banner').textContent = SEASON.notice;
+    $('#preview-banner').hidden = false;
+  }
 
   try {
     const { fixtures, standings } = await loadSeason();
