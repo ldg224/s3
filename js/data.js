@@ -1,290 +1,260 @@
-// Loads the season's sheet tabs and turns them into teams, fixtures and a ladder.
-// Columns are matched by header name, so sheet columns can be reordered or added freely.
+// Season data: loading, match status, ladder, form, win chance and awards.
+// Everything is derived from data/season.json; full match files are only loaded on the match page.
 
-import { SEASON, SOURCES, POINTS, LADDER, LIVE_WINDOW_MINUTES } from './config.js';
+import { SEASON_FILE } from './config.js';
 
-const CACHE_PREFIX = `hcl-s${SEASON.number}:`;
-const FALLBACK_COLOUR = '#9ca3af';
+let season = null;
 
-// Full CSV parser: handles quoted commas, doubled quotes and line breaks inside quotes.
-export function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
+export async function loadSeason(force = false) {
+  if (season && !force) return season;
+  const res = await fetch(`${SEASON_FILE}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Couldn't load the season data (${res.status})`);
+  season = await res.json();
+  return season;
+}
+export function setSeason(s) { season = s; }
+export function getSeason() { return season; }
 
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
-      else if (c === '"') inQuotes = false;
-      else field += c;
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ',') {
-      row.push(field); field = '';
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); rows.push(row);
-      row = []; field = '';
-    } else {
-      field += c;
-    }
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row); }
-  return rows;
+export const teamMap = s => Object.fromEntries(s.teams.map(t => [t.code, t]));
+
+// ---------- Time and status ----------
+
+export function kickoff(fx) {
+  if (!fx.date) return null;
+  const [y, m, d] = fx.date.split('-').map(Number);
+  const [hh, mm] = (fx.time || '00:00').split(':').map(Number);
+  return new Date(y, m - 1, d, hh || 0, mm || 0);
 }
 
-// "Home Score" -> "home_score"
-const headerKey = h => h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const liveMs = s => (s.live_minutes || 10) * 60000;
 
-function toRecords(rows) {
-  const [header = [], ...body] = rows;
-  const keys = header.map(headerKey);
-  return body
-    .filter(r => r.some(v => v.trim() !== ''))
-    .map(r => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()])));
+// upcoming | live | ft | awaiting (kicked off, no result uploaded) | tba | postponed
+export function status(fx, s, now = new Date()) {
+  if (fx.postponed) return 'postponed';
+  const k = kickoff(fx);
+  if (!k) return 'tba';
+  if (now < k) return 'upcoming';
+  if (!fx.result) return 'awaiting';
+  if (now - k < liveMs(s)) return 'live';
+  return 'ft';
 }
 
-// Fetches one tab. If the network or Google is down, falls back to the last copy this
-// browser saw, so the site keeps working with slightly stale data instead of breaking.
-export async function loadSource(name) {
-  const url = SOURCES[name];
-  const cacheKey = CACHE_PREFIX + name;
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const text = await res.text();
-    try { localStorage.setItem(cacheKey, text); } catch { /* storage unavailable */ }
-    return toRecords(parseCSV(text));
-  } catch (err) {
-    let cached = null;
-    try { cached = localStorage.getItem(cacheKey); } catch { /* storage unavailable */ }
-    if (cached) {
-      console.warn(`Using saved copy of "${name}":`, err);
-      return toRecords(parseCSV(cached));
-    }
-    throw new Error(`Couldn't load ${name} data (${err.message}).`);
-  }
+// While live, the match plays out over live_minutes: how far into the match file are we?
+export function liveSimTime(fx, s, now = new Date()) {
+  const frac = Math.min(1, Math.max(0, (now - kickoff(fx)) / liveMs(s)));
+  const periods = fx.result.periods || [];
+  const t0 = periods.length ? periods[0].start_t : 0;
+  return t0 + frac * (fx.result.duration_t - t0);
+}
+export const liveSpeed = (fx, s) => fx.result.duration_t / ((s.live_minutes || 10) * 60);
+
+// Score as the public should see it right now.
+export function shownScore(fx, s, now = new Date()) {
+  const st = status(fx, s, now);
+  if (st === 'ft') return { home: fx.result.home, away: fx.result.away };
+  if (st !== 'live') return null;
+  const t = liveSimTime(fx, s, now);
+  const sc = { home: 0, away: 0 };
+  for (const g of fx.result.goals) if (g.t <= t) sc[g.team === fx.home ? 'home' : 'away']++;
+  return sc;
 }
 
-// Accepts "7/11/2026", "7/11" (uses SEASON.year) or "2026-11-07", and times like
-// "19:30", "7:30 PM" or "14:00 PM". Returns null for blank, "TBA" and anything unreadable.
-export function parseKickoff(dateStr, timeStr) {
-  let d, m, y, match;
-  if ((match = (dateStr || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) {
-    [, y, m, d] = match;
-  } else if ((match = (dateStr || '').match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/))) {
-    [, d, m, y] = match;
-    y = y ? (y.length === 2 ? `20${y}` : y) : SEASON.year;
-  } else {
-    return null;
-  }
-
-  let hours = 0;
-  let minutes = 0;
-  const t = (timeStr || '').match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-  if (t) {
-    hours = Number(t[1]);
-    minutes = Number(t[2] || 0);
-    const suffix = (t[3] || '').toLowerCase();
-    if (suffix === 'pm' && hours < 12) hours += 12;
-    if (suffix === 'am' && hours === 12) hours = 0;
-  }
-  return new Date(Number(y), Number(m) - 1, Number(d), hours, minutes);
+// Match clock for a match-file time t (seconds), e.g. "67:12".
+export function clockAt(periods, t) {
+  const p = [...periods].reverse().find(p => p.start_t <= t + 1e-6) || periods[0];
+  const el = Math.max(0, t - p.start_t) + (p.period === 2 ? 2700 : 0);
+  return `${String(Math.floor(el / 60)).padStart(2, '0')}:${String(Math.floor(el % 60)).padStart(2, '0')}`;
 }
 
-const toScore = v => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
-export const safeColour = c => (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c || '') ? c : FALLBACK_COLOUR);
+export const byKickoff = (a, b) => (kickoff(a) ?? Infinity) - (kickoff(b) ?? Infinity);
+export const finished = (s, now = new Date()) => s.fixtures.filter(f => status(f, s, now) === 'ft').sort(byKickoff);
 
-// First non-empty value among several possible column names, so the site accepts
-// the league sheet's headers ("TEAM CODE") as well as short ones ("Code").
-const pick = (r, ...keys) => keys.map(k => r[k]).find(v => v) || '';
-
-// "[TUR] FC Turtle" -> "TUR", "[FWD] Forward" -> "FWD"; plain values are returned as-is.
-export const bracketCode = v => (String(v || '').match(/^\s*\[([^\]]+)\]/) || [])[1]?.trim() || String(v || '').trim();
-
-// "(9) Nine" -> 9, "$7,800.00" -> 7800, "8" -> 8
-export const toNumber = v => {
-  const s = String(v || '');
-  const n = Number((s.match(/^\s*\((-?[\d.]+)\)/) || [])[1] ?? s.replace(/[^0-9.-]/g, ''));
-  return s.trim() === '' || Number.isNaN(n) ? null : n;
-};
-
-// Reads the "GOAL 1 MIN / GOAL 1 ID" column pairs. Any number of pairs works,
-// so a high-scoring match just needs more columns added to the sheet.
-function goalsFrom(r) {
-  const goals = [];
-  for (let n = 1; `goal_${n}_min` in r || `goal_${n}_id` in r; n++) {
-    const playerId = r[`goal_${n}_id`];
-    if (!playerId) continue;
-    goals.push({ minute: toNumber(r[`goal_${n}_min`]), playerId });
-  }
-  return goals.sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
-}
-
-// Works out a fixture's state. The STATUS column is only needed for exceptions
-// (postponed, cancelled, or forcing "live"); normally entering the score is enough.
-function fixtureState(f, now) {
-  const status = f.status.toLowerCase();
-  if (status === 'postponed' || status === 'cancelled' || status === 'live') return status;
-  if (f.homeScore !== null && f.awayScore !== null) return 'result';
-  if (!f.kickoff) return 'tba';
-  if (now < f.kickoff) return 'upcoming';
-  if (now - f.kickoff < LIVE_WINDOW_MINUTES * 60000) return 'live';
-  return 'awaiting';
-}
-
-export function buildTeams(rows) {
-  const teams = new Map();
-  for (const r of rows) {
-    const code = pick(r, 'team_code', 'code').toUpperCase();
-    if (!code) continue;
-    teams.set(code, {
-      code,
-      name: pick(r, 'team_name', 'name') || code,
-      colour: safeColour(pick(r, 'primary_hex_code', 'colour', 'color')),
-      manager: pick(r, 'manager_name', 'manager'),
-      logo: r.logo || `assets/teams/${code.toLowerCase()}.png`,
-      logoAlt: r.logo_alt || `assets/teams/${code.toLowerCase()}-alt.png`,
-    });
-  }
-  return teams;
-}
-
-export function buildFixtures(rows, teams, now = new Date()) {
-  const lookup = new Map();
-  for (const t of teams.values()) {
-    lookup.set(t.code, t);
-    lookup.set(t.name.toUpperCase(), t);
-  }
-  const team = v => lookup.get(bracketCode(v).toUpperCase()) || lookup.get((v || '').trim().toUpperCase())
-    || { code: v || '', name: v || 'TBA', colour: FALLBACK_COLOUR, logo: '', unknown: true };
-
-  return rows.filter(r => r.home || r.away).map((r, i) => {
-    const f = {
-      id: r.id || r.match_id || String(i + 1),
-      week: Number(r.week) || null,
-      date: r.date,
-      time: r.time,
-      kickoff: parseKickoff(r.date, r.time),
-      home: team(r.home),
-      away: team(r.away),
-      homeScore: toScore(r.home_score),
-      awayScore: toScore(r.away_score),
-      status: r.status || '',
-      venue: r.venue || '',
-      video: pick(r, 'youtube_link', 'video'),
-      goals: goalsFrom(r),
-    };
-    f.state = fixtureState(f, now);
-    return f;
-  });
-}
-
-// The ladder is calculated from results, so there's no separate standings tab to keep in sync.
-// Tiebreakers: points, goal difference, goals for, then name.
-export function buildStandings(teams, fixtures) {
-  const table = new Map([...teams.values()].map(t => [t.code, {
-    team: t, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0, form: [],
-  }]));
-
-  const results = fixtures
-    .filter(f => f.state === 'result')
-    .sort((a, b) => (a.kickoff ?? 0) - (b.kickoff ?? 0));
-
-  for (const f of results) {
-    const home = table.get(f.home.code);
-    const away = table.get(f.away.code);
-    if (!home || !away) continue;
-    addResult(home, f.homeScore, f.awayScore);
-    addResult(away, f.awayScore, f.homeScore);
-  }
-
-  const rows = [...table.values()].map(r => ({ ...r, gd: r.gf - r.ga, form: r.form.slice(-5) }));
-  rows.sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf
-    || a.team.name.localeCompare(b.team.name));
-  rows.forEach((r, i) => { r.rank = i + 1; });
-  return rows;
-}
-
-function addResult(row, scored, conceded) {
-  const outcome = scored > conceded ? 'W' : scored < conceded ? 'L' : 'D';
-  row.played++;
-  row.gf += scored;
-  row.ga += conceded;
-  if (outcome === 'W') { row.won++; row.points += POINTS.win; }
-  if (outcome === 'D') { row.drawn++; row.points += POINTS.draw; }
-  if (outcome === 'L') { row.lost++; row.points += POINTS.loss; }
-  row.form.push(outcome);
-}
-
-// The week to show first: today's or the next upcoming week, otherwise the latest one played.
-export function currentWeek(fixtures) {
-  const dated = fixtures.filter(f => f.week && f.kickoff);
-  const next = dated
-    .filter(f => ['upcoming', 'live', 'awaiting'].includes(f.state))
-    .sort((a, b) => a.kickoff - b.kickoff)[0];
+// The week to show first: a week with a match today, else the next upcoming, else the latest.
+export function activeWeek(s, now = new Date()) {
+  const dated = s.fixtures.filter(f => kickoff(f)).sort(byKickoff);
+  const today = dated.find(f => sameDay(kickoff(f), now));
+  if (today) return today.week;
+  const next = dated.find(f => ['upcoming', 'live', 'awaiting'].includes(status(f, s, now)));
   if (next) return next.week;
-  const last = dated.sort((a, b) => b.kickoff - a.kickoff)[0];
-  return last ? last.week : (fixtures.find(f => f.week)?.week ?? 1);
+  return dated.length ? dated[dated.length - 1].week : (s.fixtures[0]?.week ?? 1);
 }
+export const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-export function buildPlayers(rows) {
-  const players = new Map();
-  for (const r of rows) {
-    const id = pick(r, 'player_id', 'id');
-    if (!id) continue;
-    players.set(id, {
-      id,
-      name: pick(r, 'player_name', 'name'),
-      team: bracketCode(pick(r, 'assigned_team', 'team')).toUpperCase(),
-      position: bracketCode(r.position).toUpperCase(),
-      offense: toNumber(pick(r, 'offense_rating', 'offense')),
-      defense: toNumber(pick(r, 'defense_rating', 'defense')),
-      weeklyCost: toNumber(r.weekly_cost),
-    });
+// ---------- Ladder ----------
+
+export function ladder(s, fixtures = finished(s)) {
+  const pts = s.points || { win: 3, draw: 1, loss: 0 };
+  const rows = Object.fromEntries(s.teams.map(t => [t.code, { team: t, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [] }]));
+  for (const f of fixtures) {
+    const h = rows[f.home], a = rows[f.away];
+    if (!h || !a) continue;
+    const hs = f.result.home, as = f.result.away;
+    for (const [r, gf, ga] of [[h, hs, as], [a, as, hs]]) {
+      r.p++; r.gf += gf; r.ga += ga;
+      const o = gf > ga ? 'W' : gf < ga ? 'L' : 'D';
+      r[o.toLowerCase()]++;
+      r.pts += o === 'W' ? pts.win : o === 'D' ? pts.draw : pts.loss;
+      r.form.push(o);
+    }
   }
-  return players;
+  const list = Object.values(rows).map(r => ({ ...r, gd: r.gf - r.ga, form: r.form.slice(-5) }));
+  list.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.team.name.localeCompare(b.team.name));
+  list.forEach((r, i) => { r.rank = i + 1; });
+  return list;
 }
 
-// Ladder straight from the sheet's Standings tab (only its first table; rows without a
-// position and team are ignored). Form still comes from results, since the tab has none.
-export function sheetStandings(rows, teams, calculated) {
-  const formByCode = new Map(calculated.map(r => [r.team.code, r.form]));
-  const lookup = new Map([...teams.values()].flatMap(t => [[t.code, t], [t.name.toUpperCase(), t]]));
-  return rows
-    .filter(r => toNumber(r.position) !== null && r.team)
-    .map(r => {
-      const team = lookup.get(bracketCode(r.team).toUpperCase()) || lookup.get(r.team.toUpperCase())
-        || { code: r.team, name: r.team, colour: FALLBACK_COLOUR, logo: '', unknown: true };
-      return {
-        team,
-        rank: toNumber(r.position),
-        played: toNumber(r.played) ?? 0,
-        won: toNumber(r.won) ?? 0,
-        drawn: toNumber(pick(r, 'draw', 'drawn')) ?? 0,
-        lost: toNumber(pick(r, 'loss', 'lost')) ?? 0,
-        gf: toNumber(r.gf) ?? 0,
-        ga: toNumber(r.ga) ?? 0,
-        gd: toNumber(r.gd) ?? 0,
-        points: toNumber(r.points) ?? 0,
-        form: formByCode.get(team.code) || [],
-      };
-    })
-    .sort((a, b) => a.rank - b.rank);
+// Position change compared with the ladder before the latest week that has results.
+export function ladderWithMovement(s, now = new Date()) {
+  const done = finished(s, now);
+  const current = ladder(s, done);
+  const lastWeek = done.length ? done[done.length - 1].week : null;
+  const before = lastWeek == null ? current : ladder(s, done.filter(f => f.week !== lastWeek));
+  const prev = Object.fromEntries(before.map(r => [r.team.code, r.rank]));
+  current.forEach(r => { r.move = (before === current || !before.some(b => b.p > 0)) ? 0 : prev[r.team.code] - r.rank; });
+  return current;
 }
 
-export async function loadSeason() {
-  const useSheetLadder = LADDER === 'sheet' && SOURCES.standings;
-  const [teamRows, fixtureRows, standingRows] = await Promise.all([
-    loadSource('teams'),
-    loadSource('fixtures'),
-    useSheetLadder ? loadSource('standings') : null,
-  ]);
-  const teams = buildTeams(teamRows);
-  const fixtures = buildFixtures(fixtureRows, teams);
-  const calculated = buildStandings(teams, fixtures);
-  const standings = useSheetLadder ? sheetStandings(standingRows, teams, calculated) : calculated;
-  return { teams, fixtures, standings };
+// ---------- Form, next match, win chance ----------
+
+export function teamForm(s, code, before = new Date(8.64e15), n = 5) {
+  return finished(s).filter(f => (f.home === code || f.away === code) && kickoff(f) < before).slice(-n);
+}
+export function resultFor(f, code) {
+  const mine = f.home === code ? f.result.home : f.result.away;
+  const theirs = f.home === code ? f.result.away : f.result.home;
+  return mine > theirs ? 'W' : mine < theirs ? 'L' : 'D';
+}
+export function nextMatch(s, code, after) {
+  return s.fixtures.filter(f => (f.home === code || f.away === code) && kickoff(f) && kickoff(f) > after).sort(byKickoff)[0] || null;
+}
+
+// Poisson model from goals scored/conceded so far (same approach as Season 2).
+export function winChance(s, home, away, excludeId) {
+  const hist = finished(s).filter(f => f.id !== excludeId);
+  const games = hist.length;
+  const baseline = games ? hist.reduce((n, f) => n + f.result.home + f.result.away, 0) / (2 * games) : 1.5;
+  const lad = ladder(s, hist);
+  const metrics = code => {
+    const mine = hist.filter(f => f.home === code || f.away === code);
+    if (mine.length) {
+      const sc = mine.reduce((n, f) => n + (f.home === code ? f.result.home : f.result.away), 0) / mine.length;
+      const co = mine.reduce((n, f) => n + (f.home === code ? f.result.away : f.result.home), 0) / mine.length;
+      return [sc, co];
+    }
+    const N = lad.length || 6, rank = lad.find(r => r.team.code === code)?.rank ?? Math.ceil(N / 2);
+    const mult = 1 + (((N + 1) / 2 - rank) / N) * 0.3;
+    return [baseline * mult, baseline * (2 - mult)];
+  };
+  const [hs, hc] = metrics(home), [as, ac] = metrics(away);
+  const b = baseline || 1.5;
+  const lh = Math.max(0.1, b * (hs / b) * (ac / b)), la = Math.max(0.1, b * (as / b) * (hc / b));
+  const pois = (l, k) => Math.exp(-l) * l ** k / fact(k);
+  let pw = 0, pd = 0, pl = 0;
+  for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) {
+    const p = pois(lh, i) * pois(la, j);
+    if (i > j) pw += p; else if (i === j) pd += p; else pl += p;
+  }
+  const tot = pw + pd + pl;
+  if (!isFinite(tot) || tot <= 0) return { home: 33, draw: 34, away: 33 };
+  const h = Math.round(pw / tot * 100), a = Math.round(pl / tot * 100);
+  return { home: h, draw: 100 - h - a, away: a };
+}
+const fact = k => (k <= 1 ? 1 : k * fact(k - 1));
+
+// ---------- Awards ----------
+
+export function playerTotals(s, now = new Date()) {
+  const tot = {};
+  const cs = {};
+  for (const f of finished(s, now)) {
+    for (const [id, p] of Object.entries(f.result.players || {})) {
+      const t = tot[id] ??= { id, name: p.name, team: p.team, apps: 0, min: 0, g: 0, a: 0, sh: 0, sot: 0, xg: 0, kp: 0, tk: 0, int: 0, sv: 0, yc: 0, rc: 0, rsum: 0, motm: 0, cs: 0, gc: 0, gk: 0 };
+      t.name = p.name; t.team = p.team;
+      t.apps++; t.min += p.min || 0;
+      for (const k of ['g', 'a', 'sh', 'sot', 'xg', 'kp', 'tk', 'int', 'sv', 'yc', 'rc']) t[k] += p[k] || 0;
+      t.rsum += p.r || 0;
+      if (f.result.motm === id) t.motm++;
+      if (p.slot === 'GK') {
+        t.gk++;
+        const conceded = p.team === f.home ? f.result.away : f.result.home;
+        t.gc += conceded;
+        if (conceded === 0) t.cs++;
+      }
+    }
+    for (const [code, other] of [[f.home, f.result.away], [f.away, f.result.home]]) {
+      const c = cs[code] ??= { cs: 0 };
+      if (other === 0) c.cs++;
+    }
+  }
+  Object.values(tot).forEach(t => { t.avg = t.apps ? t.rsum / t.apps : 0; t.xg = Math.round(t.xg * 100) / 100; });
+  return tot;
+}
+
+export function awards(s, now = new Date()) {
+  const P = Object.values(playerTotals(s, now));
+  const lad = ladder(s, finished(s, now)).filter(r => r.p > 0);
+  const top = (list, n = 4) => list.slice(0, n);
+  return [
+    { icon: '⚽', title: 'Golden Boot', sub: 'Top goalscorer', label: 'Goals',
+      list: top(P.filter(p => p.g > 0).sort((a, b) => b.g - a.g || b.a - a.a || a.min - b.min)).map(p => ({ ...p, v: p.g })) },
+    { icon: '🎯', title: 'Playmaker', sub: 'Most assists', label: 'Assists',
+      list: top(P.filter(p => p.a > 0).sort((a, b) => b.a - a.a || b.kp - a.kp || b.g - a.g)).map(p => ({ ...p, v: p.a })) },
+    { icon: '🧤', title: 'Golden Glove', sub: 'Most clean sheets', label: 'CS',
+      list: top(P.filter(p => p.gk > 0).sort((a, b) => b.cs - a.cs || a.gc - b.gc || b.sv - a.sv)).map(p => ({ ...p, v: p.cs })) },
+    { icon: '⭐', title: 'Player of the Season', sub: 'Best average match rating (2+ games)', label: 'Avg',
+      list: top(P.filter(p => p.apps >= 2).sort((a, b) => b.avg - a.avg || b.motm - a.motm)).map(p => ({ ...p, v: p.avg.toFixed(2) })) },
+    { icon: '⚔️', title: 'Best Offense', sub: 'Most goals per game', label: 'Per game', team: true,
+      list: top([...lad].sort((a, b) => b.gf / b.p - a.gf / a.p || b.gf - a.gf)).map(r => ({ name: r.team.name, team: r.team.code, v: (r.gf / r.p).toFixed(2) })) },
+    { icon: '🛡️', title: 'Best Defense', sub: 'Fewest goals conceded per game', label: 'Per game', team: true,
+      list: top([...lad].sort((a, b) => a.ga / a.p - b.ga / b.p || a.ga - b.ga)).map(r => ({ name: r.team.name, team: r.team.code, v: (r.ga / r.p).toFixed(2) })) },
+  ];
+}
+
+// ---------- Match files ----------
+
+// Match files uploaded in edit mode this session, so they play before the site has rebuilt.
+export const localFiles = new Map();
+
+export async function loadMatchFile(path) {
+  if (localFiles.has(path)) return parseMatchBlob(localFiles.get(path), true);
+  const res = await fetch(path, { cache: 'force-cache' });
+  if (!res.ok) throw new Error(`Couldn't load the match file (${res.status})`);
+  const blob = await res.blob();
+  return parseMatchBlob(blob, path.endsWith('.gz'));
+}
+
+export async function parseMatchBlob(blob, gz) {
+  const bytes = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  const isGz = gz || (bytes[0] === 0x1f && bytes[1] === 0x8b);
+  const text = isGz ? await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text() : await blob.text();
+  const data = JSON.parse(text);
+  if (data.format !== 'hcl-match') throw new Error('This is not an HCL match file');
+  return data;
+}
+
+// Compact result stored in season.json (mirrors the Python seeding script).
+export function summariseMatch(d) {
+  const names = Object.fromEntries(d.players.map(p => [p.id, p.name]));
+  const slot = Object.fromEntries(d.players.map(p => [p.id, p.slot]));
+  const team = Object.fromEntries(d.players.map(p => [p.id, p.team]));
+  const goals = d.events.filter(e => e.type === 'goal').map(e => ({
+    t: e.t, minute: e.minute, team: e.team, scorer: e.scorer, scorer_name: names[e.scorer] ?? null,
+    assist: e.assist ?? null, assist_name: e.assist ? names[e.assist] ?? null : null, own_goal: !!e.own_goal,
+  }));
+  const cards = d.events.filter(e => e.type === 'card').map(e => ({ t: e.t, minute: e.minute, team: e.team, player: e.player, name: names[e.player] ?? null, card: e.card }));
+  const players = {};
+  for (const [id, s] of Object.entries(d.stats.players)) {
+    players[id] = {
+      name: names[id], team: team[id], slot: slot[id], min: s.minutes, g: s.goals, a: s.assists, og: s.own_goals,
+      sh: s.shots, sot: s.shots_on_target, xg: s.xg, kp: s.key_passes, pas: s.passes, pc: s.passes_completed,
+      tk: s.tackles_won, int: s.interceptions, clr: s.clearances, blk: s.blocks, sv: s.saves, gc: s.goals_conceded,
+      yc: s.yellow, rc: s.red, km: s.distance_km, r: s.rating,
+    };
+  }
+  const motm = Object.keys(players).reduce((best, id) => (!best || players[id].r > players[best].r ? id : best), null);
+  const fr = d.frames.data;
+  return {
+    home: d.result.home, away: d.result.away, duration_t: fr[fr.length - 1][0] / 10, periods: d.periods,
+    goals, cards, stats: d.stats.teams, players, motm, engine: d.engine.version, seed: d.engine.seed,
+  };
 }

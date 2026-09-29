@@ -1,77 +1,61 @@
 # Heineken C League: Season 3
 
-Season 3 website. Plain HTML, CSS and JavaScript with no build step, hosted on GitHub Pages.
-All league data comes from a Google Sheet, so results are updated by editing the sheet, not the code.
+The Season 3 website: https://ldg224.github.io/s3/
 
-## Folder layout
+Plain HTML, CSS and JavaScript, no build step, hosted on GitHub Pages. League data lives in
+this repository (no spreadsheet) and is managed from the site's **edit mode**.
 
-```
-index.html          Home: next match, fixtures by week, ladder
-404.html            Shown for missing pages
-css/styles.css      All styles. Season colours are the tokens at the top.
-js/config.js        Season number, points rules, and the sheet links  <- the file you edit
-js/data.js          Loads and parses the sheet, works out match states and the ladder
-js/ui.js            Shared helpers (team badges, dates, escaping)
-js/home.js          Home page rendering
-assets/league/      Season logo, banner, title image
-assets/teams/       Team logos: <code>.png and <code>-alt.png, e.g. tur.png, tur-alt.png
-```
+## Pages
 
-New pages (match, awards, team) should import `js/data.js` and `js/ui.js`,
-not copy them, so a fix only ever has to be made once.
+| Page | What it shows |
+|---|---|
+| `index.html` | Live or next match, today's and tomorrow's matches, fixtures by week, leaderboard with movement, full ladder, top scorers |
+| `match.html?id=…` | Scoreboard, 2D match replay (live during the broadcast window), timeline, match stats, player of the match, win chance, squads with ratings, lineups, form, next match |
+| `awards.html` | Golden Boot, Playmaker, Golden Glove, Player of the Season, Best Offense, Best Defense, season leaders |
 
-## The Google Sheet
-
-The site runs on the HCL league spreadsheet, in the same format used to run Season 2.
-Columns are matched **by header name**, so columns can be reordered, and extra columns
-(notes, formulas) can be added without breaking the site. Header names aren't case-sensitive.
-
-| Tab | Columns the site reads | Notes |
-|---|---|---|
-| **Teams** | TEAM NAME, TEAM CODE, MANAGER NAME, PRIMARY HEX CODE | Code is the 3-letter team code; its logo is `assets/teams/<code>.png`. |
-| **Schedule & Results** | WEEK, DATE, TIME, STATUS, HOME, HOME SCORE, AWAY, AWAY SCORE, YOUTUBE LINK, GOAL 1 MIN, GOAL 1 ID, GOAL 2 MIN, … | HOME/AWAY take the full team name or code. DATE as `15/9/2026` or `TBA`. TIME as `12:00 PM` or `14:00`. Add more GOAL columns (GOAL 7 MIN, GOAL 7 ID, …) whenever a match needs them. |
-| **Standings** | POSITION, TEAM, PLAYED, WON, DRAW, LOSS, GF, GA, GD, POINTS | Only used when `LADDER` is `'sheet'` in `js/config.js`. |
-| **Roster** | PLAYER ID, PLAYER NAME, POSITION, ASSIGNED TEAM, OFFENSE RATING, DEFENSE RATING, WEEKLY COST | Formats like `[FWD] Forward`, `[TUR] FC Turtle`, `(9) Nine` and `$7,800.00` are understood. |
-
-**Entering results:** type the two scores. The match shows as full time and the ladder updates.
-STATUS only matters for exceptions: `postponed`, `cancelled`, or `live` (to show a live score
-before the final whistle).
-
-**The ladder** is calculated from the scores by default (points, then goal difference, then
-goals for). To use the Standings tab instead, for example if points are adjusted by hand,
-set `LADDER = 'sheet'` in `js/config.js`.
-
-### Connecting a new season's sheet
-
-1. File > Share > **Publish to web**.
-2. Pick a tab, choose **Comma-separated values (.csv)**, click Publish, copy the link.
-3. Paste it into `js/config.js` (the `SHEET` link and the tab `gid` numbers in `SOURCES`).
-4. Set `notice: ''` in `js/config.js` to remove the preview banner.
-
-Google caches published sheets, so edits can take up to about 5 minutes to appear.
-If Google can't be reached, the site shows the last data that browser loaded.
-
-## Preview locally
-
-The site loads data with `fetch`, which browsers block for files opened directly from disk,
-so preview it through a local server:
+## Data
 
 ```
-python -m http.server 8000
+data/season.json      teams, rosters, fixtures (week, date, kick-off time) and each result's summary
+matches/<id>.json.gz  full match files from the HCL simulator (github.com/ldg224/S3_Simulator)
+assets/teams/         team logos: <code>.png and <code>-alt.png (watermark)
 ```
 
-Then open http://localhost:8000.
+A fixture's result stays hidden until its kick-off time. From kick-off the match plays out
+live on the site over `live_minutes` (the 90 minutes sped up to fit), then shows as full time
+with the complete replay. Anyone determined could still find match files in the repository
+before kick-off.
 
-## Publish
+## Edit mode
+
+Click **🔒 Edit** in the top-right corner of any page.
+
+**First time on a device:** create a GitHub fine-grained token
+(github.com/settings/personal-access-tokens/new) with access to only the `ldg224/s3` repository
+and **Contents: Read and write**. Paste it in and choose a PIN. The token is encrypted with the
+PIN and stored only in that browser.
+
+**After that:** enter the PIN. You can:
+
+* **Fixtures:** add, edit and delete fixtures; set week, date and kick-off time.
+* **Upload match:** drop a simulator match file (.json or .json.gz), pick its fixture and kick-off time.
+* **Teams:** names, managers, colours, logos; add teams.
+* **Settings:** season number, live broadcast length, points, banner message.
+
+Changes preview on the page straight away and go live when you press **Publish**. That makes
+one commit to this repository, and GitHub Pages updates within about a minute.
+
+## Files
 
 ```
-.\publish.ps1 "What changed"
+index.html, match.html, awards.html
+css/styles.css   shared visuals and colour tokens (--brand-*)
+css/match.css    match centre
+css/admin.css    edit mode
+js/data.js       loading, match status, ladder, form, win chance, awards, match summaries
+js/replay.js     2D replay renderer
+js/admin.js      edit mode (PIN, GitHub commits)
+js/home.js, js/match.js, js/awards.js, js/ui.js, js/config.js
 ```
 
-Commits everything, pulls any edits made on github.com, and pushes. GitHub Pages updates in about a minute.
-
-## Starting a new season
-
-Copy this folder, bump `number` and `year` in `js/config.js`, copy the league spreadsheet
-(clear the results), publish it and paste its links into `js/config.js`, then swap the logos
-and the colour tokens.
+Preview locally with `python -m http.server 8000`.

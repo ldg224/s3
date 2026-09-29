@@ -1,46 +1,51 @@
-// Small rendering helpers shared by every page.
+// Shared rendering helpers.
 
-const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+export const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ESC[c]);
+export const $ = s => document.querySelector(s);
 
-// Sheet values go through this before being put into HTML.
-export const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ESCAPES[ch]);
+export const safeColour = c => (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c || '') ? c : '#475569');
+export const logoPath = (code, alt = false) => `assets/teams/${String(code).toLowerCase()}${alt ? '-alt' : ''}.png`;
 
-export function initials(name) {
-  const words = String(name || '?').replace(/\b(FC|United|City)\b/gi, '').trim().split(/\s+/);
-  return (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
+// Team logo with an initials fallback if the image is missing.
+export function logo(team, size = 38) {
+  const code = team?.code || '?';
+  return `<span style="--s:${size}px;--c:${esc(safeColour(team?.colour))};position:relative;display:inline-grid;width:${size}px;height:${size}px;flex:none">`
+    + `<span class="logo-fallback" style="width:100%;height:100%">${esc(code.slice(0, 3))}</span>`
+    + `<img class="logo" src="${esc(logoPath(code))}" alt="" style="position:absolute;inset:0;width:100%;height:100%" onerror="this.remove()"></span>`;
 }
+export const watermark = (code, side) => `<img class="wm ${side}" src="${esc(logoPath(code, true))}" alt="" onerror="this.remove()">`;
 
-// Team logo, falling back to a coloured initials badge if the image is missing.
-export function teamBadge(team, size = 40) {
-  const img = team.logo
-    ? `<img src="${esc(team.logo)}" alt="" width="${size}" height="${size}" loading="lazy" onerror="this.remove()">`
-    : '';
-  return `<span class="badge" style="--team:${esc(team.colour)};--size:${size}px" aria-hidden="true">`
-    + `<span class="badge-initials">${esc(team.unknown ? initials(team.name) : team.code)}</span>${img}</span>`;
-}
+const dfmt = new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+const tfmt = new Intl.DateTimeFormat('en-AU', { hour: 'numeric', minute: '2-digit' });
+export const fmtDate = d => (d ? dfmt.format(d) : 'Date TBA');
+export const fmtTime = d => (d ? tfmt.format(d) : 'TBA');
 
-const dateFmt = new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-const timeFmt = new Intl.DateTimeFormat('en-AU', { hour: 'numeric', minute: '2-digit' });
-
-export const formatDate = d => (d ? dateFmt.format(d) : 'Date TBA');
-export const formatTime = d => (d ? timeFmt.format(d) : '');
-
-export function countdownText(target, now = new Date()) {
+export function countdown(target, now = new Date()) {
   const ms = target - now;
-  if (ms <= 0) return 'Kick-off!';
-  const mins = Math.floor(ms / 60000);
-  const d = Math.floor(mins / 1440);
-  const h = Math.floor((mins % 1440) / 60);
-  const m = mins % 60;
-  return [d && `${d}d`, (d || h) && `${h}h`, `${m}m`].filter(Boolean).join(' ');
+  if (ms <= 0) return 'Kicking off';
+  const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return 'Kick-off in ' + [d && `${d}d`, (d || h) && `${h}h`, `${m % 60}m`].filter(Boolean).join(' ');
 }
 
-export const STATE_LABELS = {
-  upcoming: 'Upcoming',
-  live: 'Live',
-  result: 'Full time',
-  awaiting: 'Result pending',
-  postponed: 'Postponed',
-  cancelled: 'Cancelled',
-  tba: 'TBA',
+export const STATUS = {
+  upcoming: { label: 'Upcoming', colour: 'var(--upcoming)' },
+  live: { label: 'Live', colour: 'var(--live)' },
+  ft: { label: 'Full time', colour: 'var(--final)' },
+  awaiting: { label: 'Result pending', colour: 'var(--draw)' },
+  tba: { label: 'Unconfirmed', colour: 'var(--loss)' },
+  postponed: { label: 'Postponed', colour: 'var(--loss)' },
 };
+export function statusPill(st) {
+  const s = STATUS[st] || STATUS.tba;
+  return `<span class="pill" style="--pc:${s.colour}">${st === 'live' ? '<span class="pulse"></span>' : ''}${s.label}</span>`;
+}
+
+// Text colour with enough contrast on a team colour.
+export function onColour(hex) {
+  const c = safeColour(hex).slice(1);
+  const n = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
+  return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) >= 128 ? '#0f1115' : '#ffffff';
+}
+
+export function matchUrl(fx) { return `match.html?id=${encodeURIComponent(fx.id)}`; }

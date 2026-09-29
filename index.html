@@ -4,79 +4,85 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Heineken C League S3</title>
-  <meta name="description" content="Fixtures, results and the ladder for Heineken C League Season 3.">
+  <meta name="description" content="Fixtures, results, live matches and the ladder for Heineken C League Season 3.">
   <meta name="theme-color" content="#0f1115">
   <link rel="icon" type="image/png" href="assets/league/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/admin.css">
   <script type="module" src="js/home.js"></script>
+  <script type="module" src="js/admin.js"></script>
 </head>
 <body>
   <div class="grid-bg" aria-hidden="true"></div>
-  <a class="skip-link" href="#main">Skip to content</a>
-
-  <div id="preview-banner" class="banner" hidden></div>
-
   <div class="app">
     <header class="site-header">
-      <img class="league-logo" src="assets/league/logo.png" alt="" width="72" height="72">
-      <div class="header-text">
-        <p class="eyebrow" id="season-label">Season 3</p>
-        <h1>Heineken C League</h1>
+      <div class="header-panel">
+        <p class="eyebrow"><span class="pulse"></span><span id="season-label">Season Three</span> · Active</p>
+        <h1>HCL Match Portal</h1>
+        <p>Fixtures, live matches, results and the race for the title.</p>
       </div>
-      <nav aria-label="Sections">
-        <a href="#fixtures">Fixtures</a>
-        <a href="#ladder">Ladder</a>
-      </nav>
+      <div class="header-side">
+        <img class="header-logo" src="assets/league/logo.png" alt="Heineken C League" onerror="this.remove()">
+        <nav class="nav" aria-label="Site">
+          <a href="index.html" aria-current="page">Matches</a>
+          <a href="#ladder">Ladder</a>
+          <a href="awards.html">Awards</a>
+        </nav>
+      </div>
     </header>
 
-    <main id="main">
-      <div id="load-error" class="card error" role="alert" hidden>
-        <strong>We couldn't load the latest league data.</strong>
-        <p id="load-error-detail" class="muted"></p>
-        <button type="button" onclick="location.reload()">Try again</button>
+    <div class="notice" id="notice" hidden></div>
+
+    <div class="layout">
+      <main class="stack">
+        <section class="spotlight-wrap" id="spotlight" aria-live="polite">
+          <div class="loading"><div class="spinner"></div>Loading matches…</div>
+        </section>
+
+        <section class="stack" id="today-block" hidden></section>
+
+        <section class="stack">
+          <h2 class="section-title">Fixtures &amp; results</h2>
+          <div class="tabs" id="week-tabs" role="tablist" aria-label="Week"></div>
+          <div class="week-block" id="week-list" role="tabpanel"></div>
+        </section>
+      </main>
+
+      <aside class="stack sticky">
+        <section class="card" id="ladder">
+          <h2 class="card-title">League leaderboard <span id="games-played"></span></h2>
+          <div class="board" id="board"><div class="loading"><div class="spinner"></div>Loading…</div></div>
+          <p class="board-legend">Top 4 qualify for the finals. Arrows show movement since the previous week.</p>
+        </section>
+
+        <a class="awards-banner" href="awards.html">
+          <div>
+            <span class="neon"><i></i>LIVE RACE</span>
+            <h3>Awards race</h3>
+            <p>Golden Boot, Playmaker, Golden Glove and Player of the Season</p>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+
+        <section class="card">
+          <h2 class="card-title">Top scorers</h2>
+          <div class="mini-list" id="scorers"></div>
+        </section>
+      </aside>
+    </div>
+
+    <section class="card" id="full-ladder-card">
+      <h2 class="card-title">Full ladder</h2>
+      <div style="overflow-x:auto">
+        <table class="ladder">
+          <thead><tr><th>#</th><th class="t">Team</th><th>P</th><th class="wide">W</th><th class="wide">D</th><th class="wide">L</th><th class="wide">GF</th><th class="wide">GA</th><th>GD</th><th>Pts</th><th class="wide">Form</th></tr></thead>
+          <tbody id="ladder-body"></tbody>
+        </table>
       </div>
-
-      <section class="card" id="next-match" aria-live="polite">
-        <p class="muted">Loading next match…</p>
-      </section>
-
-      <section class="card" id="fixtures" aria-labelledby="fixtures-heading">
-        <h2 id="fixtures-heading">Fixtures &amp; results</h2>
-        <div id="week-tabs" class="week-tabs" role="tablist" aria-label="Week"></div>
-        <div id="fixtures-list" role="tabpanel">
-          <p class="muted">Loading fixtures…</p>
-        </div>
-      </section>
-
-      <section class="card" id="ladder" aria-labelledby="ladder-heading">
-        <h2 id="ladder-heading">Ladder</h2>
-        <div class="table-wrap">
-          <table class="ladder">
-            <thead>
-              <tr>
-                <th scope="col" class="rank"><abbr title="Position">#</abbr></th>
-                <th scope="col" class="ladder-team">Team</th>
-                <th scope="col"><abbr title="Played">P</abbr></th>
-                <th scope="col" class="wide"><abbr title="Won">W</abbr></th>
-                <th scope="col" class="wide"><abbr title="Drawn">D</abbr></th>
-                <th scope="col" class="wide"><abbr title="Lost">L</abbr></th>
-                <th scope="col" class="wide"><abbr title="Goals for">GF</abbr></th>
-                <th scope="col" class="wide"><abbr title="Goals against">GA</abbr></th>
-                <th scope="col"><abbr title="Goal difference">GD</abbr></th>
-                <th scope="col" class="pts"><abbr title="Points">Pts</abbr></th>
-                <th scope="col" class="form wide">Form</th>
-              </tr>
-            </thead>
-            <tbody id="ladder-body">
-              <tr><td colspan="11" class="muted">Loading ladder…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </main>
+    </section>
 
     <footer class="site-footer">
       <span>Heineken C League · Season 3</span>
