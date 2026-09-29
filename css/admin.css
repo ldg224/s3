@@ -43,7 +43,7 @@
 .ed-panel.open { transform: none; }
 .ed-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--glass-border); flex-wrap: wrap; }
 .ed-head h2 { margin: 0; font-size: 1rem; font-weight: 900; flex: 1; }
-.ed-pending { font-size: .75rem; color: var(--upcoming); font-weight: 700; }
+.ed-pending { font-size: .75rem; font-weight: 700; flex-basis: 100%; order: 9; }
 .ed-tabs { display: flex; border-bottom: 1px solid var(--glass-border); padding: 0 12px; overflow-x: auto; }
 .ed-tabs button { background: none; border: 0; padding: 12px 14px; font-weight: 800; font-size: .82rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .ed-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--brand-2); }
@@ -78,3 +78,5 @@
   .fx-table td { border: 0; }
   .team-edit { grid-template-columns: 1fr 1fr; }
 }
+.ed-wait { color: var(--upcoming); }
+.edit-toggle .state { font-size: .8rem; }

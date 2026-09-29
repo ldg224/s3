@@ -92,7 +92,8 @@ const strip = s => ({ ...s, updated: null });
 function updateToggle() {
   const n = pendingCount();
   toggle.classList.toggle('on', !!token);
-  toggle.innerHTML = token ? `✎ Edit mode${n ? ` <span class="badge">${n}</span>` : ''}` : 'Editor login';
+  const dot = { saving: '⏳', live: '✓', failed: '⚠' }[liveState] || '';
+  toggle.innerHTML = token ? `✎ Edit mode${n ? ` <span class="badge">${n}</span>` : dot ? ` <span class="state">${dot}</span>` : ''}` : 'Editor login';
 }
 
 function modal(html) {
@@ -160,7 +161,7 @@ function openSetup() {
 
 async function startEditing() {
   if (!base) {
-    base = structuredClone(await loadSeason());
+    base = structuredClone(await loadSeason(true)); // fresh copy, not the one the page loaded earlier
     draft = structuredClone(base);
   }
   updateToggle();
@@ -171,7 +172,7 @@ function openPanel() {
   if (!panel) {
     panel = el(`<aside class="ed-panel" aria-label="League editor">
       <div class="ed-head"><h2>League editor</h2><span class="ed-pending"></span>
-        <button class="ed-btn primary" data-publish>Publish</button><button class="ed-btn" data-discard>Discard</button>
+        <button class="ed-btn primary" data-publish>Publish now</button><button class="ed-btn" data-discard>Discard</button>
         <button class="ed-btn" data-lock title="Lock edit mode">Lock</button><button class="ed-btn" data-close aria-label="Close">✕</button></div>
       <div class="ed-tabs" role="tablist"></div>
       <div class="ed-body"></div></aside>`);
@@ -179,14 +180,14 @@ function openPanel() {
     panel.querySelector('[data-close]').onclick = () => panel.classList.remove('open');
     panel.querySelector('[data-lock]').onclick = lock;
     panel.querySelector('[data-discard]').onclick = () => { if (confirm('Discard all unpublished changes?')) { draft = structuredClone(base); uploads.clear(); refresh(); } };
-    panel.querySelector('[data-publish]').onclick = publish;
+    panel.querySelector('[data-publish]').onclick = () => { autoBlocked = false; publish(); };
   }
   requestAnimationFrame(() => panel.classList.add('open'));
   refresh();
 }
 
 function lock() {
-  if (pendingCount() && !confirm('You have unpublished changes. Lock anyway? They will be lost.')) return;
+  if (pendingCount() && !confirm('Some changes haven’t been published yet. Lock anyway? They will be lost.')) return;
   token = null;
   try { sessionStorage.removeItem(SESSION); } catch { /* storage unavailable */ }
   panel?.classList.remove('open');
@@ -196,8 +197,8 @@ function lock() {
 
 function refresh() {
   const n = pendingCount();
-  panel.querySelector('.ed-pending').textContent = n ? `${n} unpublished change${n > 1 ? 's' : ''}` : 'No changes';
-  panel.querySelector('[data-publish]').disabled = !n;
+  showState();
+  panel.querySelector('[data-publish]').disabled = !n || publishing;
   const tabs = [['fixtures', 'Fixtures'], ['upload', 'Upload match'], ['teams', 'Teams'], ['settings', 'Settings']];
   const tb = panel.querySelector('.ed-tabs');
   tb.innerHTML = tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
@@ -213,6 +214,7 @@ function refresh() {
     refresh.sig = sig;
     setSeason(draft);
     window.dispatchEvent(new CustomEvent('season-changed', { detail: draft }));
+    scheduleAutoPublish();
   }
 }
 
@@ -425,47 +427,105 @@ function settingsTab(body) {
 }
 
 // ---------- Publish ----------
+//
+// Every change goes live on its own: a few seconds after the last edit it's committed to GitHub,
+// then we watch the public site until GitHub Pages is serving it. If a Pages build fails
+// (it can when two saves land seconds apart) we ask GitHub to build again.
+
+const AUTO_DELAY = 4000;
+let publishing = false, autoTimer = null, autoBlocked = false; // blocked after a conflict until 'Publish now'
+let liveState = '', liveMsg = '';   // '', 'saving', 'live', 'failed'
+
+function setState(state, msg) { liveState = state; liveMsg = msg; if (panel) showState(); updateToggle(); }
+function showState() {
+  const box = panel.querySelector('.ed-pending'), n = pendingCount();
+  if (publishing || liveState === 'saving' || liveState === 'failed') box.innerHTML = liveMsg;
+  else if (n) box.innerHTML = `<span class="ed-wait">${n} change${n > 1 ? 's' : ''}, publishing automatically…</span>`;
+  else box.innerHTML = liveMsg || '<span class="ed-ok">✓ Everything is live</span>';
+}
+
+function scheduleAutoPublish() {
+  clearTimeout(autoTimer);
+  if (!token || !pendingCount() || autoBlocked) return;
+  autoTimer = setTimeout(() => publish(), AUTO_DELAY);
+  if (panel) showState();
+}
 
 async function publish() {
-  const btn = panel.querySelector('[data-publish]');
-  const status = panel.querySelector('.ed-pending');
-  btn.disabled = true;
+  clearTimeout(autoTimer);
+  if (publishing || !pendingCount()) return;
+  publishing = true;
+  panel.querySelector('[data-publish]').disabled = true;
+  const snap = structuredClone(draft), sentUploads = new Map(uploads);
+  const step = t => setState('saving', `<span class="ed-wait">${esc(t)}</span>`);
   try {
-    // Has someone else published since we loaded?
-    status.textContent = 'Checking for other changes…';
+    // Has someone else published since we loaded? (A newer stamp than ours means yes; an older
+    // one is just GitHub briefly serving the previous version straight after our own publish.)
+    step('Checking for other changes…');
     const raw = await fetch(`https://api.github.com/repos/${REPO}/contents/${SEASON_FILE}?ref=${BRANCH}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' }, cache: 'no-store',
     });
     if (!raw.ok) throw new Error(`GitHub: couldn't read the current league data (${raw.status})`);
-    const remoteSeason = await raw.json();
-    if (remoteSeason.updated !== base.updated && !confirm('The league data was changed somewhere else since you opened edit mode. Publishing will overwrite those changes. Continue?')) {
-      btn.disabled = false; refresh(); return;
+    const remote = await raw.json();
+    if ((remote.updated || '') > (base.updated || '') && !confirm('The league data was changed somewhere else since you opened edit mode. Publishing will overwrite those changes. Continue?')) {
+      autoBlocked = true;
+      setState('failed', '<span class="ed-err">Not published: the league was changed elsewhere. Reload the page to get the latest.</span>');
+      return;
     }
-    draft.updated = new Date().toISOString().slice(0, 19);
-    const referenced = new Set(draft.fixtures.map(f => f.file).filter(Boolean));
-    const removed = base.fixtures.map(f => f.file).filter(p => p && !referenced.has(p));
-    const files = [...uploads].filter(([path]) => !path.startsWith(MATCH_DIR) || referenced.has(path));
-    files.push([SEASON_FILE, new Blob([JSON.stringify(draft)], { type: 'application/json' })]);
-    const n = draft.fixtures.length;
-    const msg = `Edit mode: update league (${n} fixtures, ${files.length - 1} file${files.length === 2 ? '' : 's'})`;
+    snap.updated = draft.updated = new Date().toISOString().slice(0, 19);
+    const referenced = new Set(snap.fixtures.map(f => f.file).filter(Boolean));
+    const removed = base.fixtures.map(f => f.file).filter(path => path && !referenced.has(path));
+    const files = [...sentUploads].filter(([path]) => !path.startsWith(MATCH_DIR) || referenced.has(path));
+    files.push([SEASON_FILE, new Blob([JSON.stringify(snap)], { type: 'application/json' })]);
+    const msg = `Edit mode: update league (${snap.fixtures.length} fixtures, ${files.length - 1} file${files.length === 2 ? '' : 's'})`;
     // Straight after a previous publish GitHub can briefly report the old branch tip, which makes
     // the new commit look out of date. Wait a moment and try again.
     for (let attempt = 1; ; attempt++) {
-      try { await commit(files, [...new Set(removed)], msg, s => { status.textContent = s; }); break; }
+      try { await commit(files, [...new Set(removed)], msg, step); break; }
       catch (e) {
         if (attempt >= 3 || !/fast forward|\(409\)|\(422\)/i.test(e.message)) throw e;
-        status.textContent = 'Retrying…';
+        step('Retrying…');
         await new Promise(r => setTimeout(r, 2000 * attempt));
       }
     }
-    base = structuredClone(draft);
-    uploads.clear();
-    refresh();
-    status.innerHTML = '<span class="ed-ok">Published. The live site updates in about a minute.</span>';
+    base = snap;
+    for (const [path, blob] of sentUploads) if (uploads.get(path) === blob) uploads.delete(path);
+    (window.hclPublished ||= new Set()).add(snap.updated);
+    watchLive(snap.updated);
   } catch (e) {
-    status.textContent = '';
-    alert(`Publishing failed: ${e.message}`);
-    btn.disabled = false;
+    setState('failed', `<span class="ed-err">Not published: ${esc(e.message)}</span>`);
+    alert(`Publishing failed: ${e.message}\n\nYour changes are still here. Press "Publish now" to try again.`);
+  } finally {
+    publishing = false;
+    refresh();
+    scheduleAutoPublish(); // anything edited while we were saving
+  }
+}
+
+// Poll the public site until it serves this version. A newer publish replaces an older watch.
+async function watchLive(stamp) {
+  watchLive.current = stamp;
+  const started = Date.now();
+  let rebuilt = false;
+  setState('saving', '<span class="ed-wait">Saved. Waiting for the live site to update…</span>');
+  while (watchLive.current === stamp) {
+    await new Promise(r => setTimeout(r, 6000));
+    if (watchLive.current !== stamp) return;
+    try {
+      const live = await (await fetch(`${SEASON_FILE}?t=${Date.now()}`, { cache: 'no-store' })).json();
+      if ((live.updated || '') >= stamp) { setState('live', '<span class="ed-ok">✓ Live on the site. Everyone viewing gets a refresh prompt.</span>'); return; }
+    } catch { /* keep waiting */ }
+    const waited = Date.now() - started;
+    if (!rebuilt && waited > 150000) {
+      rebuilt = true;
+      setState('saving', '<span class="ed-wait">The live site is slow to update. Asking GitHub to rebuild it…</span>');
+      try { await gh(`/repos/${REPO}/pages/builds`, { method: 'POST' }); } catch { /* token may not allow it; keep waiting */ }
+    }
+    if (waited > 360000) {
+      setState('failed', '<span class="ed-err">⚠ Saved to GitHub, but the live site hasn’t updated yet.</span> <button class="ed-btn small" data-recheck>Check again</button>');
+      panel?.querySelector('[data-recheck]')?.addEventListener('click', () => watchLive(stamp));
+      return;
+    }
   }
 }
 
@@ -477,6 +537,6 @@ function boot() {
   try { token = sessionStorage.getItem(SESSION); } catch { token = null; }
   updateToggle();
   toggle.onclick = () => (token ? startEditing() : openUnlock());
-  window.addEventListener('beforeunload', e => { if (pendingCount()) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', e => { if (pendingCount() || publishing) { e.preventDefault(); e.returnValue = ''; } });
 }
 boot();

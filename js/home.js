@@ -49,12 +49,13 @@ function renderHero() {
   let text;
   if (live.length) text = `<span class="pulse" style="color:var(--live)"></span> ${live.length === 1 ? `Live now: ${esc(name(live[0]))}` : `${live.length} matches live now`}`;
   else if (next) text = `Next match: ${esc(name(next))}, ${esc(dayLabel(kickoff(next)))} at ${esc(fmtTime(kickoff(next)))}`;
-  else text = fx.length ? 'All matches played.' : 'Fixtures coming soon.';
+  else text = fx.length ? 'All matches played.' : 'The fixtures for the new season are coming soon.';
   $('#hero-status').innerHTML = text;
   const weeks = new Set(S.fixtures.map(f => f.week).filter(w => w != null));
   const played = S.fixtures.filter(f => status(f, S) === 'ft').length;
   const fact = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
-  $('#hero-facts').innerHTML = fact(S.teams.length, 'Teams') + fact(`${activeWeek(S)}<small>/${weeks.size}</small>`, 'Week') + fact(`${played}<small>/${S.fixtures.length}</small>`, 'Played');
+  $('#hero-facts').innerHTML = fact(S.teams.length, 'Teams') + fact((S.players || []).length, 'Players')
+    + (S.fixtures.length ? fact(`${activeWeek(S)}<small>/${weeks.size}</small>`, 'Week') + fact(`${played}<small>/${S.fixtures.length}</small>`, 'Played') : '');
 }
 
 function renderWeeks(selected) {
@@ -65,7 +66,7 @@ function renderWeeks(selected) {
   const sel = tabs.querySelector('[aria-selected="true"]');
   if (sel) tabs.scrollLeft = sel.offsetLeft - (tabs.clientWidth - sel.clientWidth) / 2;
   const list = S.fixtures.filter(f => String(f.week ?? 'TBA') === String(selected)).sort(byKickoff);
-  $('#week-list').innerHTML = dayGroups(list) || '<p class="empty">No matches this week.</p>';
+  $('#week-list').innerHTML = dayGroups(list) || `<p class="empty">${S.fixtures.length ? 'No matches this week.' : 'No fixtures yet. They’ll appear here as soon as they’re scheduled.'}</p>`;
 }
 
 function renderLadder() {
@@ -85,7 +86,7 @@ function renderLadder() {
 function renderScorers() {
   const list = Object.values(playerTotals(S)).filter(p => p.g > 0).sort((a, b) => b.g - a.g || b.a - a.a).slice(0, 5);
   $('#scorers').innerHTML = list.map(p => `<div class="mini-row" style="--tc:${esc(safeColour(T[p.team]?.colour))}"><span class="dot"></span>${esc(p.name)}<span class="muted" style="font-size:.72rem">${esc(p.team)}</span><span class="val">${p.g}</span></div>`).join('')
-    || '<p class="empty">No goals yet.</p>';
+    || '<p class="empty">No goals yet. The race starts at the first kick-off.</p>';
 }
 
 function renderAll() {
