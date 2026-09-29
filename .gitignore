@@ -2,3 +2,8 @@
 Thumbs.db
 desktop.ini
 .vscode/
+__pycache__/
+*.pyc
+js/sim/.cache/
+js/sim/matches/
+js/sim/attributes.csv

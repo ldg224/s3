@@ -1,4 +1,4 @@
-// Runs the HCL match engine (Python, copied from github.com/ldg224/S3_Simulator into js/sim/hcl_sim)
+// Runs the HCL match engine (Python, in js/sim/hcl_sim; see js/sim/README.md)
 // in the browser with Pyodide. Used only by js/simulate.js, which starts this worker on demand.
 
 importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');

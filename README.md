@@ -17,7 +17,7 @@ this repository (no spreadsheet) and is managed from the site's **edit mode**.
 
 ```
 data/season.json      teams, rosters, fixtures (week, date, kick-off time) and each result's summary
-matches/<id>.json.gz  full match files from the HCL simulator (github.com/ldg224/S3_Simulator)
+matches/<id>.json.gz  full match files from the match engine (js/sim, format in js/sim/docs/OUTPUT_FORMAT.md)
 assets/teams/         team logos: <code>.png and <code>-alt.png (watermark)
 ```
 
