@@ -449,7 +449,17 @@ async function publish() {
     const files = [...uploads].filter(([path]) => !path.startsWith(MATCH_DIR) || referenced.has(path));
     files.push([SEASON_FILE, new Blob([JSON.stringify(draft)], { type: 'application/json' })]);
     const n = draft.fixtures.length;
-    await commit(files, [...new Set(removed)], `Edit mode: update league (${n} fixtures, ${files.length - 1} file${files.length === 2 ? '' : 's'})`, s => { status.textContent = s; });
+    const msg = `Edit mode: update league (${n} fixtures, ${files.length - 1} file${files.length === 2 ? '' : 's'})`;
+    // Straight after a previous publish GitHub can briefly report the old branch tip, which makes
+    // the new commit look out of date. Wait a moment and try again.
+    for (let attempt = 1; ; attempt++) {
+      try { await commit(files, [...new Set(removed)], msg, s => { status.textContent = s; }); break; }
+      catch (e) {
+        if (attempt >= 3 || !/fast forward|\(409\)|\(422\)/i.test(e.message)) throw e;
+        status.textContent = 'Retrying…';
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
+    }
     base = structuredClone(draft);
     uploads.clear();
     refresh();
