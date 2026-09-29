@@ -6,8 +6,9 @@
 // in that browser. The PIN unlocks it; without the token nobody can change the site.
 
 import { REPO, BRANCH, SEASON_FILE, MATCH_DIR } from './config.js';
-import { loadSeason, setSeason, summariseMatch, parseMatchBlob, localFiles, kickoff, loadMatchFile } from './data.js';
-import { esc, safeColour } from './ui.js';
+import { loadSeason, setSeason, summariseMatch, parseMatchBlob, localFiles, kickoff, loadMatchFile, status } from './data.js';
+import { esc, safeColour, logo, fmtDate, fmtTime } from './ui.js';
+import { STAGE_NAMES } from './league.js';
 import { loginHash, newSalt } from './managers.js';
 
 const STORE = 'hcl-s3-admin';
@@ -238,62 +239,127 @@ function refresh() {
 
 // ---------- Fixtures ----------
 
-const teamOpts = (sel) => draft.teams.map(t => `<option value="${esc(t.code)}"${t.code === sel ? ' selected' : ''}>${esc(t.code)}</option>`).join('');
+const teamOpts = (sel) => draft.teams.map(t => `<option value="${esc(t.code)}"${t.code === sel ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
 const newId = (week, h, a) => {
   let id = `w${week}-${h}-${a}`.toLowerCase(), i = 2;
   while (draft.fixtures.some(f => f.id === id)) id = `w${week}-${h}-${a}-${i++}`.toLowerCase();
   return id;
 };
 
-function fixturesTab(body) {
-  const fx = [...draft.fixtures].sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
-  const rows = fx.map(f => `<tr data-id="${esc(f.id)}">
-    <td><input class="ed-input w" type="number" min="1" data-k="week" value="${esc(f.week ?? '')}" aria-label="Week"></td>
-    <td><input class="ed-input" type="date" data-k="date" value="${esc(f.date || '')}" aria-label="Date"></td>
-    <td><input class="ed-input" type="time" data-k="time" value="${esc(f.time || '')}" aria-label="Kick-off time"></td>
-    <td><select class="ed-select" data-k="home" aria-label="Home">${teamOpts(f.home)}</select></td>
-    <td><select class="ed-select" data-k="away" aria-label="Away">${teamOpts(f.away)}</select></td>
-    <td class="fx-result ${f.result ? '' : 'none'}">${f.result ? `${f.result.home}-${f.result.away}${uploads.has(f.file) ? ' •' : ''}` : 'No file'}</td>
-    <td><div class="ed-row" style="flex-wrap:nowrap">
-      ${f.result ? '<button class="ed-btn small primary" data-act="video" title="Export a highlights video">🎬 Video</button>' : '<button class="ed-btn small primary" data-act="sim" title="Play this match in the simulator">⚡ Simulate</button>'}
-      <button class="ed-btn small" data-act="upload">${f.result ? 'Replace' : 'Upload'}</button>
-      ${f.result ? '<button class="ed-btn small danger" data-act="clear" title="Remove the match file">Remove file</button>' : ''}
-      <button class="ed-btn small danger" data-act="delete" aria-label="Delete fixture">✕</button></div></td></tr>`).join('');
-  body.innerHTML = `<div class="ed-section"><h3>Fixtures</h3>
-    <p class="ed-hint">Set each match's week, date and kick-off time. Results stay hidden until kick-off, then the match plays out live over ${esc(draft.live_minutes || 10)} minutes (change this in Settings). Use <b>Generate</b> to build a whole season at once.</p>
-    ${unplayed().length ? `<div class="ed-row"><button class="ed-btn primary" id="sim-all">⚡ Simulate all ${unplayed().length} fixtures without a result</button><span class="ed-hint">Results stay hidden until each kick-off.</span></div>` : ''}
-    <div style="overflow-x:auto"><table class="fx-table"><thead><tr><th>Wk</th><th>Date</th><th>Kick-off</th><th>Home</th><th>Away</th><th>Result</th><th></th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="7" class="ed-hint">No fixtures yet.</td></tr>'}
-    <tr class="fx-new"><td><input class="ed-input w" type="number" min="1" id="nf-week" value="${esc(fx.length ? fx[fx.length - 1].week : 1)}" aria-label="New fixture week"></td>
-      <td><input class="ed-input" type="date" id="nf-date" aria-label="New fixture date"></td><td><input class="ed-input" type="time" id="nf-time" value="12:00" aria-label="New fixture time"></td>
-      <td><select class="ed-select" id="nf-home">${teamOpts(draft.teams[0]?.code)}</select></td><td><select class="ed-select" id="nf-away">${teamOpts(draft.teams[1]?.code)}</select></td>
-      <td colspan="2"><button class="ed-btn small primary" id="nf-add">+ Add fixture</button></td></tr></tbody></table></div></div>`;
+// Fixture cards grouped by week. What each card shows depends on where the match is up to.
+const fxOpenWeeks = new Set(), fxEditing = new Set();
+let fxFilter = 'all', fxWeeksInit = false;
 
-  body.querySelector('tbody').addEventListener('change', e => {
-    const tr = e.target.closest('tr[data-id]'), k = e.target.dataset.k;
-    if (!tr || !k) return;
-    const f = draft.fixtures.find(x => x.id === tr.dataset.id);
+function fxState(f) {
+  const st = status(f, draft);
+  if (!f.home || !f.away) return { key: 'tbc', label: 'Teams to be decided' };
+  if (st === 'postponed') return { key: 'pp', label: 'Postponed' };
+  if (!kickoff(f)) return { key: 'tbc', label: f.result ? 'Result ready · needs a date' : 'Needs a date' };
+  if (f.result) return st === 'upcoming' ? { key: 'ready', label: 'Result ready · hidden until kick-off' } : st === 'live' ? { key: 'done', label: 'Live now' } : { key: 'done', label: 'Played' };
+  return st === 'upcoming' ? { key: 'up', label: 'Upcoming · no result yet' } : { key: 'warn', label: 'Kicked off · needs a result' };
+}
+
+function fixtureCard(f, T) {
+  const side = code => T[code] || { code: code || '?', name: code ? code : 'TBC' };
+  const h = side(f.home), a = side(f.away), k = kickoff(f), state = fxState(f), editing = fxEditing.has(f.id);
+  const mid = f.result ? `<span class="fx-score ${state.key === 'ready' ? 'hidden' : ''}" title="${state.key === 'ready' ? 'Hidden from the public until kick-off' : ''}">${f.result.home}–${f.result.away}</span>`
+    : `<span class="fx-time">${k ? esc(fmtTime(k)) : 'TBC'}</span>`;
+  const btn = (act, label, cls = '') => `<button class="ed-btn small ${cls}" data-act="${act}">${label}</button>`;
+  const actions = [
+    !f.result && !f.postponed && f.home && f.away ? btn('sim', '⚡ Simulate', 'primary') : '',
+    f.result ? btn('video', '🎬 Video') : '',
+    btn('upload', f.result ? 'Replace file' : 'Upload file'),
+    f.result ? btn('clear', 'Remove result', 'danger') : '',
+    btn('edit', editing ? 'Done' : 'Edit'),
+    btn('delete', 'Delete', 'danger'),
+  ].join('');
+  return `<article class="fx-card ${state.key}" data-id="${esc(f.id)}">
+    <div class="fx-meta"><span>${f.stage ? `<b>${esc(STAGE_NAMES[f.stage] || f.stage)}</b> · ` : ''}${k ? esc(fmtDate(k)) : 'No date set'}</span>
+      <span class="fx-chip ${state.key}">${esc(state.label)}</span></div>
+    <div class="fx-main">
+      <span class="fx-team home"><span class="fx-name">${esc(h.name)}</span>${logo(h, 34)}</span>
+      <span class="fx-mid">${mid}</span>
+      <span class="fx-team away">${logo(a, 34)}<span class="fx-name">${esc(a.name)}</span></span>
+    </div>
+    <div class="fx-actions">${actions}</div>
+    ${editing ? `<div class="fx-edit">
+      <label class="ed-field">Week<input class="ed-input" type="number" min="1" data-k="week" value="${esc(f.week ?? '')}"></label>
+      <label class="ed-field">Date<input class="ed-input" type="date" data-k="date" value="${esc(f.date || '')}"></label>
+      <label class="ed-field">Kick-off<input class="ed-input" type="time" data-k="time" value="${esc(f.time || '')}"></label>
+      <label class="ed-field">Home<select class="ed-select" data-k="home">${teamOpts(f.home)}</select></label>
+      <label class="ed-field">Away<select class="ed-select" data-k="away">${teamOpts(f.away)}</select></label></div>` : ''}
+  </article>`;
+}
+
+function fixturesTab(body) {
+  const T = Object.fromEntries(draft.teams.map(t => [t.code, t]));
+  const all = [...draft.fixtures].sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
+  const states = new Map(all.map(f => [f.id, fxState(f).key]));
+  const count = key => all.filter(f => states.get(f.id) === key).length;
+  const filters = [['all', 'All', all.length], ['todo', 'Need a result', count('up') + count('warn')], ['ready', 'Result ready', count('ready')], ['done', 'Played', count('done')], ['tbc', 'Needs a date', count('tbc') + count('pp')]];
+  const keep = f => fxFilter === 'all' || (fxFilter === 'todo' ? ['up', 'warn'].includes(states.get(f.id)) : fxFilter === 'tbc' ? ['tbc', 'pp'].includes(states.get(f.id)) : states.get(f.id) === fxFilter);
+  const shown = all.filter(keep);
+  const weeks = [...new Set(shown.map(f => f.week ?? 'TBA'))];
+  // First visit: open the weeks that still have work to do (or the first week).
+  if (!fxWeeksInit && all.length) {
+    fxWeeksInit = true;
+    for (const f of all) if (states.get(f.id) !== 'done') { fxOpenWeeks.add(String(f.week ?? 'TBA')); break; }
+    if (!fxOpenWeeks.size) fxOpenWeeks.add(String(all[0].week ?? 'TBA'));
+  }
+  const weekHtml = weeks.map(w => {
+    const list = shown.filter(f => (f.week ?? 'TBA') === w), open = fxOpenWeeks.has(String(w)) || fxFilter !== 'all';
+    const dates = [...new Set(list.map(f => (kickoff(f) ? fmtDate(kickoff(f)) : null)).filter(Boolean))];
+    const done = list.filter(f => f.result).length;
+    return `<details class="fx-week" data-week="${esc(w)}"${open ? ' open' : ''}>
+      <summary class="fx-week-head"><b>${w === 'TBA' ? 'Unscheduled' : `Week ${esc(w)}`}</b><span>${esc(dates.join(', ') || 'No date')}</span><span class="fx-count">${done}/${list.length} results</span></summary>
+      <div class="fx-list">${list.map(f => fixtureCard(f, T)).join('')}</div></details>`;
+  }).join('');
+  const todo = unplayed().length;
+  body.innerHTML = `<div class="ed-section">
+    <div class="fx-top"><div><h3>Fixtures</h3><p class="ed-hint">${all.length} matches · ${count('ready') + count('done')} with results · results stay hidden until kick-off, then play out live over ${esc(draft.live_minutes || 10)} minutes.</p></div>
+      ${todo ? `<button class="ed-btn primary" id="sim-all">⚡ Simulate all ${todo} without a result</button>` : ''}</div>
+    <div class="fx-filters">${filters.map(([k, l, n]) => `<button class="fx-filter" data-filter="${k}" aria-pressed="${fxFilter === k}">${l} <span>${n}</span></button>`).join('')}</div>
+    ${weekHtml || `<p class="ed-hint">${all.length ? 'Nothing matches this filter.' : 'No fixtures yet. Use <b>Generate</b> to build a season, or add one below.'}</p>`}
+    <details class="fx-add"><summary>+ Add a fixture</summary>
+      <div class="fx-edit">
+        <label class="ed-field">Week<input class="ed-input" type="number" min="1" id="nf-week" value="${esc(all.length ? all[all.length - 1].week ?? 1 : 1)}"></label>
+        <label class="ed-field">Date<input class="ed-input" type="date" id="nf-date"></label>
+        <label class="ed-field">Kick-off<input class="ed-input" type="time" id="nf-time" value="16:00"></label>
+        <label class="ed-field">Home<select class="ed-select" id="nf-home">${teamOpts(draft.teams[0]?.code)}</select></label>
+        <label class="ed-field">Away<select class="ed-select" id="nf-away">${teamOpts(draft.teams[1]?.code)}</select></label>
+        <button class="ed-btn primary" id="nf-add">Add fixture</button></div></details></div>`;
+
+  body.querySelectorAll('details.fx-week').forEach(d => d.addEventListener('toggle', () => { d.open ? fxOpenWeeks.add(d.dataset.week) : fxOpenWeeks.delete(d.dataset.week); }));
+  body.onchange = e => {
+    const card = e.target.closest('.fx-card'), k = e.target.dataset.k;
+    if (!card || !k) return;
+    const f = draft.fixtures.find(x => x.id === card.dataset.id);
     let v = e.target.value;
     if (k === 'week') v = v === '' ? null : +v;
-    if ((k === 'home' || k === 'away') && f.result && !confirm('This fixture already has a match file for different teams. Change the team anyway?')) { refresh(); return; }
+    if ((k === 'home' || k === 'away') && f.result && !confirm('This fixture already has a result for different teams. Change the team anyway?')) { refresh(); return; }
     f[k] = v || (k === 'week' ? null : '');
+    if (k === 'week') fxOpenWeeks.add(String(v ?? 'TBA'));
     refresh();
-  });
-  body.querySelector('tbody').addEventListener('click', e => {
-    const b = e.target.closest('[data-act]'); if (!b) return;
-    const f = draft.fixtures.find(x => x.id === b.closest('tr').dataset.id);
-    if (b.dataset.act === 'delete' && confirm(`Delete ${f.home || 'TBC'} v ${f.away || 'TBC'} (week ${f.week})?`)) {
+  };
+  body.onclick = e => {
+    const fl = e.target.closest('[data-filter]');
+    if (fl) { fxFilter = fl.dataset.filter; refresh(); return; }
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const f = draft.fixtures.find(x => x.id === b.closest('.fx-card').dataset.id);
+    const name = c => T[c]?.name || c || 'TBC';
+    const act = b.dataset.act;
+    if (act === 'edit') { fxEditing.has(f.id) ? fxEditing.delete(f.id) : fxEditing.add(f.id); refresh(); }
+    if (act === 'delete' && confirm(`Delete ${name(f.home)} v ${name(f.away)} (week ${f.week ?? '?'})?`)) {
       if (f.file) uploads.delete(f.file);
       draft.fixtures = draft.fixtures.filter(x => x !== f);
       refresh();
     }
-    if (b.dataset.act === 'clear' && confirm('Remove the match file from this fixture?')) {
-      uploads.delete(f.file); f.result = null; delete f.file; refresh();
-    }
-    if (b.dataset.act === 'upload') { tab = 'upload'; uploadTarget = f.id; refresh(); }
-    if (b.dataset.act === 'video') openVideoExport(f);
-    if (b.dataset.act === 'sim') simulateMany([f]);
-  });
+    if (act === 'clear' && confirm(`Remove the result of ${name(f.home)} v ${name(f.away)}? You can simulate or upload it again.`)) { uploads.delete(f.file); f.result = null; delete f.file; refresh(); }
+    if (act === 'upload') { tab = 'upload'; uploadTarget = f.id; refresh(); }
+    if (act === 'video') openVideoExport(f);
+    if (act === 'sim') simulateMany([f]);
+  };
   body.querySelector('#sim-all')?.addEventListener('click', () => {
     const list = unplayed();
     if (confirm(`Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}? This can take a while; keep this tab open.`)) simulateMany(list);
@@ -302,6 +368,7 @@ function fixturesTab(body) {
     const week = +body.querySelector('#nf-week').value || 1, h = body.querySelector('#nf-home').value, a = body.querySelector('#nf-away').value;
     if (h === a) return alert('Pick two different teams.');
     draft.fixtures.push({ id: newId(week, h, a), week, date: body.querySelector('#nf-date').value, time: body.querySelector('#nf-time').value, home: h, away: a, result: null });
+    fxOpenWeeks.add(String(week));
     refresh();
   };
 }
@@ -408,7 +475,7 @@ async function openVideoExport(f) {
         for (const [name, blob] of files) saveDownload(blob, name);
       }
       bar.style.width = '100%';
-      const mins = Math.floor(r.duration / 60), secs = Math.round(r.duration % 60);
+      const t = Math.round(r.duration), mins = Math.floor(t / 60), secs = t % 60;
       status.innerHTML = `<span class="ed-ok">Done: ${mins}:${String(secs).padStart(2, '0')} video saved${folder ? ` to <b>${esc(folder.name)}</b>` : ''}, with the thumbnail and YouTube text.</span>`;
       const img = new Image(); img.onload = () => pv.drawImage(img, 0, 0, 480, 270); img.src = URL.createObjectURL(thumb);
     } catch (e) {
@@ -503,7 +570,7 @@ async function attachMatch(f, d) {
 // ---------- Simulate ----------
 // Runs the HCL match simulator in this browser (js/simulate.js) and attaches the result.
 
-const unplayed = () => draft.fixtures.filter(f => !f.result && f.home && f.away).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
+const unplayed = () => draft.fixtures.filter(f => !f.result && !f.postponed && f.home && f.away).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
 let holdAuto = false;   // pause auto-publish during a batch, then publish once
 
 async function simulateMany(list) {
@@ -1029,6 +1096,7 @@ async function publish() {
     watchLive(snap.updated);
   } catch (e) {
     setState('failed', `<span class="ed-err">Not published: ${esc(e.message)}</span>`);
+    autoBlocked = true;   // no auto-retry loop; 'Publish now' clears this
     alert(`Publishing failed: ${e.message}\n\nYour changes are still here. Press "Publish now" to try again.`);
   } finally {
     publishing = false;
