@@ -123,3 +123,30 @@ button.prow:hover { border-color: rgba(255,255,255,.18); }
   padding: 10px 10px 10px 16px; border-radius: 16px; background: #1b2210; border: 1px solid rgba(143,255,6,.45); box-shadow: 0 16px 40px rgba(0,0,0,.55);
 }
 .savebar span { font-size: .86rem; font-weight: 700; }
+
+/* Login options */
+.check { display: flex; align-items: center; gap: 9px; font-size: .84rem; font-weight: 600; color: var(--text); cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--brand-2); flex: none; }
+.check .muted { font-size: .76rem; }
+
+/* Overview */
+.ov-grid { display: grid; gap: 16px; }
+@media (min-width: 900px) { .ov-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.ov-match { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ov-match .grow { flex: 1 1 180px; min-width: 0; display: grid; gap: 2px; }
+.ov-match b { font-size: 1.1rem; font-weight: 800; }
+.ov-match .grow > span:not(.countdown):not(.ov-live) { font-size: .82rem; color: var(--muted); }
+.ov-v { font-weight: 800; color: var(--muted); }
+.ov-live { color: var(--live); font-weight: 800; font-size: .82rem; }
+.todo { display: grid; gap: 6px; }
+.todo-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 12px; text-align: left;
+  background: rgba(230,167,52,.08); border: 1px solid rgba(230,167,52,.3); color: var(--text); font-size: .88rem; font-weight: 600; cursor: pointer;
+}
+.todo-row.ok { background: var(--surface-2); border-color: var(--line); }
+.todo-row:disabled { cursor: default; }
+.todo-row .tick { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: .75rem; font-weight: 900; flex: none; background: var(--upcoming); color: #1a1205; }
+.todo-row.ok .tick { background: var(--final); color: #04140d; }
+.todo-row .arrow { margin-left: auto; color: var(--muted); font-size: 1.1rem; }
+.res-dot { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: .72rem; font-weight: 900; flex: none; }
+.res-dot.W { background: var(--final); color: #04140d; } .res-dot.D { background: #4b5563; } .res-dot.L { background: var(--loss); }

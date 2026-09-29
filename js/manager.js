@@ -2,14 +2,15 @@
 // then manages their lineup, formation, tactics and set pieces, checks their players'
 // season ratings and answers questions from the media. Saves go through the manager relay.
 
-import { loadSeason, teamMap, playerTotals } from './data.js';
-import { $, esc, logo, safeColour, onColour } from './ui.js';
+import { loadSeason, teamMap, playerTotals, kickoff, status, ladder, finished, resultFor } from './data.js';
+import { $, esc, logo, safeColour, onColour, countdown, dayLabel, fmtTime, matchUrl } from './ui.js';
 import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, findManagerTeam, relaySave, pressQuestions } from './managers.js';
 
 const SESSION = 'hcl-manager';
 let S, T, me = null;          // me = { email, pin, team }
 let file = null, saved = '';  // working manager file, and its last-saved JSON
-let tab = 'lineup', picking = null, message = '';
+let tab = 'overview', picking = null, message = '';
+const REMEMBER = 'hcl-manager-email', STAY = 'hcl-manager-stay';
 
 const shirt = p => String(p.id).slice(-2);
 const surname = p => p.name.split(' ').slice(-1)[0];
@@ -24,6 +25,8 @@ function stats() {
 
 // ---------- Sign in ----------
 
+const remembered = () => { try { return localStorage.getItem(REMEMBER) || ''; } catch { return ''; } };
+
 function renderLogin(err = '') {
   const configured = Object.keys(S.managers || {}).length;
   $('#mount').innerHTML = `<section class="card mg-login">
@@ -32,8 +35,10 @@ function renderLogin(err = '') {
     <p>Sign in to pick your lineup, set your tactics and talk to the media.</p>
     ${configured ? '' : '<p class="err">Manager logins haven’t been set up yet. Ask the league admin.</p>'}
     <form id="login" class="stack" style="gap:12px" autocomplete="on">
-      <label class="field">Email<input class="input" type="email" name="email" autocomplete="email" required></label>
+      <label class="field">Email<input class="input" type="email" name="email" autocomplete="email" required value="${esc(remembered())}"></label>
       <label class="field">PIN<input class="input" type="password" name="pin" inputmode="numeric" autocomplete="current-password" required></label>
+      <label class="check"><input type="checkbox" name="remember"${remembered() ? ' checked' : ''}><span>Remember my email on this device</span></label>
+      <label class="check"><input type="checkbox" name="stay"><span>Keep me signed in on this device <span class="muted">(only on your own phone or computer)</span></span></label>
       <p class="err" id="login-err">${esc(err)}</p>
       <button class="btn primary" type="submit">Sign in</button>
     </form>
@@ -46,7 +51,11 @@ function renderLogin(err = '') {
     const team = await findManagerTeam(S, fd.get('email'), fd.get('pin'));
     if (!team) { btn.disabled = false; btn.textContent = 'Sign in'; $('#login-err').textContent = 'That email and PIN don’t match any team.'; return; }
     me = { email: String(fd.get('email')).trim(), pin: String(fd.get('pin')).trim(), team };
-    try { sessionStorage.setItem(SESSION, JSON.stringify(me)); } catch { /* private mode */ }
+    try {
+      sessionStorage.setItem(SESSION, JSON.stringify(me));
+      if (fd.get('remember')) localStorage.setItem(REMEMBER, me.email); else localStorage.removeItem(REMEMBER);
+      if (fd.get('stay')) localStorage.setItem(STAY, JSON.stringify(me)); else localStorage.removeItem(STAY);
+    } catch { /* private mode */ }
     await openTeam();
   };
 }
@@ -64,7 +73,7 @@ async function openTeam() {
 
 function signOut() {
   if (dirty() && !confirm('You have unsaved changes. Sign out anyway?')) return;
-  try { sessionStorage.removeItem(SESSION); } catch { /* ignore */ }
+  try { sessionStorage.removeItem(SESSION); localStorage.removeItem(STAY); } catch { /* ignore */ }
   me = null; file = null;
   renderLogin();
 }
@@ -73,7 +82,7 @@ function signOut() {
 
 function render() {
   const t = T[me.team];
-  const tabs = [['lineup', 'Lineup'], ['tactics', 'Tactics'], ['squad', 'Squad'], ['media', 'Media']];
+  const tabs = [['overview', 'Overview'], ['lineup', 'Lineup'], ['tactics', 'Tactics'], ['squad', 'Squad'], ['scout', 'Scouting'], ['reports', 'Match reports'], ['media', 'Media']];
   const open = pressQuestions(S, me.team).filter(q => !file.press.some(p => p.id === q.id)).length;
   $('#mount').innerHTML = `<div class="stack">
     <section class="card mg-head">${logo(t, 60)}<div class="grow"><h1>${esc(t.name)}</h1><p>${esc(t.manager || 'Manager')} · signed in as ${esc(me.email)}</p></div>
@@ -85,7 +94,7 @@ function render() {
   $('#signout').onclick = signOut;
   document.querySelector('.mg-tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; picking = null; render(); } };
   $('#save').onclick = () => save('updated their team');
-  ({ lineup: lineupPane, tactics: tacticsPane, squad: squadPane, media: mediaPane })[tab]($('#pane'));
+  ({ overview: overviewPane, lineup: lineupPane, tactics: tacticsPane, squad: squadPane, scout: p => extraPane(p, 'scoutPane'), reports: p => extraPane(p, 'reportsPane'), media: mediaPane })[tab]($('#pane'));
   updateSaveBar();
 }
 
@@ -116,6 +125,61 @@ async function save(what) {
     updateSaveBar();
     return false;
   }
+}
+
+// ---------- Overview ----------
+
+function overviewPane(pane) {
+  const code = me.team, now = new Date(), name = c => T[c]?.name || c;
+  const mine = S.fixtures.filter(f => f.home === code || f.away === code);
+  const next = mine.filter(f => ['upcoming', 'live'].includes(status(f, S, now))).sort((a, b) => kickoff(a) - kickoff(b))[0];
+  const last = mine.filter(f => status(f, S, now) === 'ft').sort((a, b) => kickoff(b) - kickoff(a))[0];
+  const row = ladder(S, finished(S, now)).find(r => r.team.code === code);
+  const open = pressQuestions(S, code).filter(q => !file.press.some(p => p.id === q.id));
+  const xi = Object.keys(file.lineup).length, slots = Object.keys(FORMATIONS[file.formation]).length;
+  const preset = Object.keys(PRESETS).find(n => TACTICS.every(t => PRESETS[n][t.key] === file.tactics[t.key])) || 'Custom';
+  const ord = n => n + (['st', 'nd', 'rd'][((n + 90) % 100 - 10) % 10 - 1] || 'th');
+  const todo = [
+    { ok: xi === slots, text: xi === slots ? `Starting XI picked (${file.formation})` : `Pick your starting XI (${xi}/${slots} chosen)`, go: 'lineup' },
+    { ok: file.bench.length > 0, text: file.bench.length ? `${file.bench.length} substitutes on the bench` : 'Pick some substitutes', go: 'lineup' },
+    { ok: !!file.captain, text: file.captain ? 'Captain chosen' : 'Choose a captain', go: 'tactics' },
+    { ok: true, text: `Game plan: ${preset}`, go: 'tactics' },
+    { ok: !open.length, text: open.length ? `${open.length} question${open.length > 1 ? 's' : ''} from the media waiting` : 'No media questions waiting', go: 'media' },
+    { ok: !dirty(), text: dirty() ? 'You have unsaved changes' : (file.updated ? `Everything saved (${new Date(file.updated + 'Z').toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })})` : 'Nothing saved yet'), go: null },
+  ];
+  const vs = f => { const home = f.home === code, opp = home ? f.away : f.home; return { home, opp: T[opp] || { code: opp, name: opp } }; };
+  const nextHtml = next ? (() => {
+    const { home, opp } = vs(next), k = kickoff(next);
+    return `<div class="ov-match">${logo(T[code], 48)}<span class="ov-v">${home ? 'v' : '@'}</span>${logo(opp, 48)}
+      <div class="grow"><b>${esc(opp.name)}</b><span>${home ? 'Home' : 'Away'} · Week ${esc(next.week)} · ${esc(dayLabel(k))} ${esc(fmtTime(k))}</span>
+      ${status(next, S, now) === 'live' ? '<span class="ov-live">● Live now</span>' : `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>`}</div></div>
+      <div class="chips"><button class="btn small primary" data-go="scout">Scout ${esc(opp.name)}</button><a class="btn small" href="${matchUrl(next)}">Match centre</a></div>`;
+  })() : '<p class="empty">No upcoming matches scheduled.</p>';
+  const lastHtml = last ? (() => {
+    const { home, opp } = vs(last), r = resultFor(last, code), gf = home ? last.result.home : last.result.away, ga = home ? last.result.away : last.result.home;
+    return `<a class="prow" href="${matchUrl(last)}" style="text-decoration:none"><span class="res-dot ${r}">${r}</span><span class="nm">${gf}-${ga} ${home ? 'v' : '@'} ${esc(opp.name)}</span><span class="tag">Week ${esc(last.week)}</span></a>`;
+  })() : '<p class="empty" style="padding:6px">No matches played yet.</p>';
+  pane.innerHTML = `<div class="ov-grid">
+    <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Next match</h2>${nextHtml}</section>
+    <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Before kick-off</h2>
+      <div class="todo">${todo.map(t => `<button class="todo-row ${t.ok ? 'ok' : ''}" ${t.go ? `data-go="${t.go}"` : 'disabled'}><span class="tick">${t.ok ? '✓' : '!'}</span><span>${esc(t.text)}</span>${t.go ? '<span class="arrow">›</span>' : ''}</button>`).join('')}</div></section>
+    <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">League position</h2>
+      ${row ? `<div class="big-stat"><div><b>${row.p ? ord(row.rank) : '–'}</b><span>Position</span></div><div><b>${row.pts}</b><span>Points</span></div><div><b>${row.w}-${row.d}-${row.l}</b><span>W-D-L</span></div><div><b>${row.gd > 0 ? '+' : ''}${row.gd}</b><span>Goal diff</span></div></div>` : ''}
+      <div class="chips"><a class="btn small" href="index.html#table">Full table</a></div></section>
+    <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Last result</h2>${lastHtml}<div class="chips"><button class="btn small" data-go="reports">All match reports</button></div></section>
+  </div>`;
+  pane.onclick = e => { const g = e.target.closest('[data-go]'); if (g) { tab = g.dataset.go; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
+}
+
+// Scouting and Match reports live in js/manager-scout.js.
+let extraMod = null;
+function extraPane(pane, fn) {
+  const ctx = { season: S, team: me.team, teamFile: file, teams: T };
+  if (extraMod?.[fn]) return extraMod[fn](pane, ctx);
+  pane.innerHTML = '<section class="card"><p class="empty">Loading…</p></section>';
+  import('./manager-scout.js')
+    .then(m => { extraMod = m; if (m[fn]) m[fn](pane, ctx); else throw new Error(); })
+    .catch(() => { pane.innerHTML = '<section class="card"><p class="empty">Coming soon.</p></section>'; });
 }
 
 // ---------- Lineup ----------
@@ -291,10 +355,11 @@ function mediaPane(pane) {
 async function init() {
   try { S = await loadSeason(); } catch (e) { $('#mount').innerHTML = `<div class="card empty">Couldn't load the league. ${esc(e.message)}</div>`; return; }
   T = teamMap(S);
-  try { me = JSON.parse(sessionStorage.getItem(SESSION) || 'null'); } catch { me = null; }
+  try { me = JSON.parse(sessionStorage.getItem(SESSION) || localStorage.getItem(STAY) || 'null'); } catch { me = null; }
   if (me && !T[me.team]) me = null;
   if (me) await openTeam(); else renderLogin();
   window.addEventListener('beforeunload', e => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
+  setInterval(() => document.querySelectorAll('.countdown[data-kickoff]').forEach(el => { el.textContent = countdown(new Date(+el.dataset.kickoff)); }), 15000);
 }
 
 init();
