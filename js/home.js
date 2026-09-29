@@ -54,7 +54,7 @@ function renderHero() {
   const weeks = new Set(S.fixtures.map(f => f.week).filter(w => w != null));
   const played = S.fixtures.filter(f => status(f, S) === 'ft').length;
   const fact = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
-  $('#hero-facts').innerHTML = fact(S.teams.length, 'Teams') + fact((S.players || []).length, 'Players')
+  $('#hero-facts').innerHTML = fact(S.teams.length, 'Teams') + fact((S.players || []).filter(p => T[p.team]).length, 'Players')
     + (S.fixtures.length ? fact(`${activeWeek(S)}<small>/${weeks.size}</small>`, 'Week') + fact(`${played}<small>/${S.fixtures.length}</small>`, 'Played') : '');
 }
 

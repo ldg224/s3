@@ -88,3 +88,24 @@
 .vid-bar span { display: block; height: 100%; width: 0; background: var(--brand-grad); transition: width .3s; }
 .vid-status { font-size: .84rem; }
 .vid-folder { justify-content: space-between; }
+
+/* Generate a season */
+.gen-teams { display: flex; flex-wrap: wrap; gap: 6px; }
+.gen-team { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--glass-border); font-size: .8rem; font-weight: 700; cursor: pointer; }
+.gen-team:has(input:checked) { border-color: var(--brand-2); background: rgba(143,255,6,.06); }
+.gen-team .sw, .gen-team input { flex: none; }
+.gen-team .sw { width: 10px; height: 10px; border-radius: 3px; }
+.gen-weeks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; max-height: 340px; overflow: auto; }
+.gen-week { font-size: .76rem; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid var(--glass-border); display: grid; gap: 2px; }
+
+/* Players */
+.squads { display: flex; flex-wrap: wrap; gap: 6px; }
+.squad-chip { font-size: .74rem; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: rgba(52,211,153,.12); color: #6ee7b7; }
+.squad-chip.bad { background: rgba(239,68,68,.12); color: #fca5a5; }
+.pl-table .ed-input:not(.w) { min-width: 150px; }
+
+/* History */
+.hist { display: grid; }
+.hist-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 2px; border-top: 1px solid rgba(255,255,255,.05); font-size: .82rem; }
+.hist-row b { display: block; font-weight: 700; }
+.squad-chip.free { background: rgba(255,255,255,.07); color: var(--muted); }

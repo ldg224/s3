@@ -199,7 +199,7 @@ function refresh() {
   const n = pendingCount();
   showState();
   panel.querySelector('[data-publish]').disabled = !n || publishing;
-  const tabs = [['fixtures', 'Fixtures'], ['upload', 'Upload match'], ['teams', 'Teams'], ['settings', 'Settings']];
+  const tabs = [['fixtures', 'Fixtures'], ['generate', 'Generate'], ['upload', 'Upload match'], ['teams', 'Teams'], ['players', 'Players'], ['history', 'History'], ['settings', 'Settings']];
   const tb = panel.querySelector('.ed-tabs');
   tb.innerHTML = tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
   tb.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; refresh(); } };
@@ -207,7 +207,8 @@ function refresh() {
   body.innerHTML = '';
   body.onchange = null;
   body.onclick = null;
-  ({ fixtures: fixturesTab, upload: uploadTab, teams: teamsTab, settings: settingsTab })[tab](body);
+  body.oninput = null;
+  ({ fixtures: fixturesTab, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, history: historyTab, settings: settingsTab })[tab](body);
   updateToggle();
   // Show edits on the page immediately (only when something actually changed).
   const sig = JSON.stringify(draft) + uploads.size;
@@ -238,12 +239,13 @@ function fixturesTab(body) {
     <td><select class="ed-select" data-k="away" aria-label="Away">${teamOpts(f.away)}</select></td>
     <td class="fx-result ${f.result ? '' : 'none'}">${f.result ? `${f.result.home}-${f.result.away}${uploads.has(f.file) ? ' •' : ''}` : 'No file'}</td>
     <td><div class="ed-row" style="flex-wrap:nowrap">
-      ${f.result ? '<button class="ed-btn small primary" data-act="video" title="Export a highlights video">🎬 Video</button>' : ''}
+      ${f.result ? '<button class="ed-btn small primary" data-act="video" title="Export a highlights video">🎬 Video</button>' : '<button class="ed-btn small primary" data-act="sim" title="Play this match in the simulator">⚡ Simulate</button>'}
       <button class="ed-btn small" data-act="upload">${f.result ? 'Replace' : 'Upload'}</button>
       ${f.result ? '<button class="ed-btn small danger" data-act="clear" title="Remove the match file">Remove file</button>' : ''}
       <button class="ed-btn small danger" data-act="delete" aria-label="Delete fixture">✕</button></div></td></tr>`).join('');
   body.innerHTML = `<div class="ed-section"><h3>Fixtures</h3>
-    <p class="ed-hint">Set each match's week, date and kick-off time. Results stay hidden until kick-off, then the match plays out live over ${esc(draft.live_minutes || 10)} minutes (change this in Settings).</p>
+    <p class="ed-hint">Set each match's week, date and kick-off time. Results stay hidden until kick-off, then the match plays out live over ${esc(draft.live_minutes || 10)} minutes (change this in Settings). Use <b>Generate</b> to build a whole season at once.</p>
+    ${unplayed().length ? `<div class="ed-row"><button class="ed-btn primary" id="sim-all">⚡ Simulate all ${unplayed().length} fixtures without a result</button><span class="ed-hint">Results stay hidden until each kick-off.</span></div>` : ''}
     <div style="overflow-x:auto"><table class="fx-table"><thead><tr><th>Wk</th><th>Date</th><th>Kick-off</th><th>Home</th><th>Away</th><th>Result</th><th></th></tr></thead>
     <tbody>${rows || '<tr><td colspan="7" class="ed-hint">No fixtures yet.</td></tr>'}
     <tr class="fx-new"><td><input class="ed-input w" type="number" min="1" id="nf-week" value="${esc(fx.length ? fx[fx.length - 1].week : 1)}" aria-label="New fixture week"></td>
@@ -274,6 +276,11 @@ function fixturesTab(body) {
     }
     if (b.dataset.act === 'upload') { tab = 'upload'; uploadTarget = f.id; refresh(); }
     if (b.dataset.act === 'video') openVideoExport(f);
+    if (b.dataset.act === 'sim') simulateMany([f]);
+  });
+  body.querySelector('#sim-all')?.addEventListener('click', () => {
+    const list = unplayed();
+    if (confirm(`Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}? This can take a while; keep this tab open.`)) simulateMany(list);
   });
   body.querySelector('#nf-add').onclick = () => {
     const week = +body.querySelector('#nf-week').value || 1, h = body.querySelector('#nf-home').value, a = body.querySelector('#nf-away').value;
@@ -448,7 +455,7 @@ function renderUpload(body) {
       <label class="ed-field">Kick-off<input class="ed-input" id="u-time" type="time" value="${esc(target?.time || '12:00')}"></label>
     </div>
     <div class="ed-row"><button class="ed-btn primary" id="u-save">Add to season</button><button class="ed-btn" id="u-cancel">Cancel</button></div>
-    <p class="ed-hint">Changes are saved to the site when you press <b>Publish</b>.</p>`;
+    <p class="ed-hint">Saved to the live site automatically a few seconds after you add it.</p>`;
   const sel = body.querySelector('#u-target');
   if (!target) sel.value = '__new';
   sel.onchange = () => { uploadTarget = sel.value === '__new' ? '__new' : sel.value; renderUpload(body); };
@@ -456,19 +463,312 @@ function renderUpload(body) {
   body.querySelector('#u-save').onclick = async () => {
     const week = +body.querySelector('#u-week').value || 1, date = body.querySelector('#u-date').value, time = body.querySelector('#u-time').value;
     if (!date) return alert('Set the kick-off date. The result is hidden until then.');
-    ensureTeams(d);
     let f = sel.value === '__new' ? null : draft.fixtures.find(x => x.id === sel.value);
     if (f && (f.home !== h.code || f.away !== a.code) && !confirm('The teams in this file don\'t match that fixture. Attach anyway (the fixture will be updated to these teams)?')) return;
     if (!f) { f = { id: newId(week, h.code, a.code), result: null }; draft.fixtures.push(f); }
     Object.assign(f, { week, date, time, home: h.code, away: a.code });
-    f.file = `${MATCH_DIR}/${f.id}.json.gz`;
-    f.result = summariseMatch(d);
-    const gz = await new Response(new Blob([JSON.stringify(d)]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
-    uploads.set(f.file, gz);
-    localFiles.set(f.file, gz);
+    await attachMatch(f, d);
     pendingFile = null; uploadTarget = null; tab = 'fixtures';
     refresh();
   };
+}
+
+// Attach a match (uploaded or simulated) to a fixture: result summary in the season, full file uploaded.
+async function attachMatch(f, d) {
+  ensureTeams(d);
+  f.file = `${MATCH_DIR}/${f.id}.json.gz`;
+  f.result = summariseMatch(d);
+  const gz = await new Response(new Blob([JSON.stringify(d)]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
+  uploads.set(f.file, gz);
+  localFiles.set(f.file, gz);
+}
+
+// ---------- Simulate ----------
+// Runs the HCL match simulator in this browser (js/simulate.js) and attaches the result.
+
+const unplayed = () => draft.fixtures.filter(f => !f.result).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
+let holdAuto = false;   // pause auto-publish during a batch, then publish once
+
+async function simulateMany(list) {
+  const m = modal(`<h2>⚡ Simulate</h2><p class="sim-what"></p>
+    <div class="vid-bar"><span></span></div><p class="vid-status">Starting the simulator…</p><div class="ed-err"></div>
+    <div class="ed-row"><button class="ed-btn" data-close>Cancel</button></div>`);
+  const what = m.querySelector('.sim-what'), bar = m.querySelector('.vid-bar span'), status = m.querySelector('.vid-status'), err = m.querySelector('.ed-err'), close = m.querySelector('[data-close]');
+  let cancelled = false, running = true, done = 0;
+  const skipped = [];
+  m.addEventListener('click', e => { if (running && e.target === m) e.stopImmediatePropagation(); }, true);
+  close.onclick = () => { if (running) { cancelled = true; close.textContent = 'Stopping after this match…'; } else m.remove(); };
+  holdAuto = true;
+  try {
+    const sim = await import('./simulate.js').catch(() => { throw new Error('The simulator isn’t installed on the site yet.'); });
+    for (const f of list) {
+      if (cancelled) break;
+      what.textContent = `${f.home} v ${f.away} · Week ${f.week ?? '?'}${list.length > 1 ? ` (${done + 1} of ${list.length})` : ''}`;
+      let data;
+      try {
+        // A fresh seed each time, so simulating a fixture again gives a new result.
+        data = await sim.simulateFixture(draft, f, { seed: Math.floor(Math.random() * 2 ** 31), onProgress: frac => {
+          bar.style.width = `${Math.round(((done + Math.min(1, frac)) / list.length) * 100)}%`;
+          status.textContent = frac < 0.02 ? 'Loading the simulator (first time takes a moment)…' : `Playing the match… ${Math.round(frac * 100)}%`;
+        } });
+      } catch (e) {
+        if (list.length === 1) throw e;
+        skipped.push(`${f.home} v ${f.away}: ${e.message}`);   // keep going with the rest
+        continue;
+      }
+      await attachMatch(f, data);
+      done++;
+      refresh();
+    }
+    bar.style.width = '100%';
+    status.innerHTML = `<span class="ed-ok">${done} match${done === 1 ? '' : 'es'} simulated${cancelled ? ' (stopped early)' : ''}.${done ? ' Saving to the live site…' : ''}</span>`;
+    if (skipped.length) err.innerHTML = `${skipped.length} skipped:<br>${skipped.map(esc).join('<br>')}`;
+  } catch (e) {
+    err.textContent = `${done ? `${done} simulated, then: ` : ''}${e.message}`;
+  } finally {
+    running = false; holdAuto = false; close.textContent = 'Close';
+    refresh();
+    scheduleAutoPublish();
+  }
+}
+
+// ---------- Generate a season ----------
+// Round-robin (circle method). Odd team counts get a bye each round.
+
+const gen = { teams: null, legs: 1, start: '', every: 7, time: '16:00', gap: 5, mode: 'append' };
+
+function roundRobin(codes, legs) {
+  const t = [...codes];
+  if (t.length % 2) t.push(null);
+  const n = t.length, rounds = [];
+  for (let r = 0; r < n - 1; r++) {
+    const games = [];
+    for (let i = 0; i < n / 2; i++) {
+      let h = t[i], a = t[n - 1 - i];
+      if ((i === 0 && r % 2) || (i > 0 && i % 2)) [h, a] = [a, h];
+      if (h && a) games.push([h, a]);
+    }
+    rounds.push(games);
+    t.splice(1, 0, t.pop());   // rotate everyone but the first team
+  }
+  const out = [...rounds];
+  for (let l = 1; l < legs; l++) out.push(...rounds.map(g => g.map(([h, a]) => (l % 2 ? [a, h] : [h, a]))));
+  return out;
+}
+
+function planSeason() {
+  const codes = draft.teams.map(t => t.code).filter(c => gen.teams.has(c));
+  if (codes.length < 2) return { error: 'Pick at least two teams.' };
+  if (!gen.start) return { error: 'Choose the date of the first round.' };
+  const kept = gen.mode === 'replace' ? draft.fixtures.filter(f => f.result) : draft.fixtures;
+  const firstWeek = Math.max(0, ...kept.map(f => f.week || 0)) + 1;
+  const [y, mo, d] = gen.start.split('-').map(Number), [hh, mm] = (gen.time || '16:00').split(':').map(Number);
+  const pad = n => String(n).padStart(2, '0');
+  const fixtures = [];
+  roundRobin(codes, gen.legs).forEach((games, r) => {
+    const day = new Date(y, mo - 1, d + r * gen.every);
+    const date = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+    games.forEach(([h, a], j) => {
+      const mins = hh * 60 + mm + j * gen.gap;
+      fixtures.push({ week: firstWeek + r, date, time: `${pad(Math.floor(mins / 60) % 24)}:${pad(mins % 60)}`, home: h, away: a });
+    });
+  });
+  return { fixtures, removed: draft.fixtures.length - kept.length };
+}
+
+function generateTab(body) {
+  if (!gen.teams) gen.teams = new Set(draft.teams.map(t => t.code));
+  if (!gen.start) { const d = new Date(Date.now() + 7 * 86400000); gen.start = d.toISOString().slice(0, 10); }
+  body.innerHTML = `<div class="ed-section"><h3>Generate a season</h3>
+    <p class="ed-hint">Every team plays every other team. With an odd number of teams, one team rests each round.</p>
+    <div class="gen-teams">${draft.teams.map(t => `<label class="gen-team"><input type="checkbox" data-team="${esc(t.code)}"${gen.teams.has(t.code) ? ' checked' : ''}><span class="sw" style="background:${esc(safeColour(t.colour))}"></span>${esc(t.name)}</label>`).join('') || '<p class="ed-hint">Add teams first.</p>'}</div>
+    <div class="ed-row">
+      <label class="ed-field">Each pair plays<select class="ed-select" data-g="legs"><option value="1"${gen.legs === 1 ? ' selected' : ''}>Once</option><option value="2"${gen.legs === 2 ? ' selected' : ''}>Twice (home and away)</option><option value="3"${gen.legs === 3 ? ' selected' : ''}>Three times</option></select></label>
+      <label class="ed-field">First round<input class="ed-input" type="date" data-g="start" value="${esc(gen.start)}"></label>
+      <label class="ed-field" style="width:120px">Days between rounds<input class="ed-input" type="number" min="1" max="60" data-g="every" value="${gen.every}"></label>
+    </div>
+    <div class="ed-row">
+      <label class="ed-field">First kick-off<input class="ed-input" type="time" data-g="time" value="${esc(gen.time)}"></label>
+      <label class="ed-field" style="width:150px">Minutes between matches<input class="ed-input" type="number" min="0" max="600" data-g="gap" value="${gen.gap}"></label>
+      <label class="ed-field">Existing fixtures<select class="ed-select" data-g="mode"><option value="append"${gen.mode === 'append' ? ' selected' : ''}>Keep them, add after</option><option value="replace"${gen.mode === 'replace' ? ' selected' : ''}>Replace the ones without results</option></select></label>
+    </div></div>
+    <div class="ed-section"><h3>Preview</h3><div id="gen-preview"></div>
+      <div class="ed-row"><button class="ed-btn primary" id="gen-add">Add to season</button></div></div>`;
+  const preview = () => {
+    const plan = planSeason(), box = body.querySelector('#gen-preview'), btn = body.querySelector('#gen-add');
+    btn.disabled = !!plan.error;
+    if (plan.error) { box.innerHTML = `<p class="ed-err">${esc(plan.error)}</p>`; return; }
+    const weeks = [...new Set(plan.fixtures.map(f => f.week))];
+    btn.textContent = `Add ${plan.fixtures.length} fixtures${plan.removed ? ` (replacing ${plan.removed})` : ''}`;
+    box.innerHTML = `<p class="ed-hint">${weeks.length} rounds, ${plan.fixtures.length} matches.</p><div class="gen-weeks">${weeks.map(w => {
+      const games = plan.fixtures.filter(f => f.week === w);
+      return `<div class="gen-week"><b>Week ${w}</b> <span class="ed-hint">${esc(games[0].date)}</span>${games.map(g => `<div>${esc(g.time)} · ${esc(g.home)} v ${esc(g.away)}</div>`).join('')}</div>`;
+    }).join('')}</div>`;
+  };
+  body.oninput = body.onchange = e => {
+    const k = e.target.dataset.g, team = e.target.dataset.team;
+    if (team) e.target.checked ? gen.teams.add(team) : gen.teams.delete(team);
+    if (k) gen[k] = ['legs', 'every', 'gap'].includes(k) ? Math.max(k === 'gap' ? 0 : 1, +e.target.value || 0) : e.target.value;
+    if (k || team) preview();
+  };
+  body.querySelector('#gen-add').onclick = () => {
+    const plan = planSeason();
+    if (plan.error) return;
+    if (plan.removed && !confirm(`This removes ${plan.removed} fixture${plan.removed > 1 ? 's' : ''} without results. Continue?`)) return;
+    if (gen.mode === 'replace') draft.fixtures = draft.fixtures.filter(f => f.result);
+    for (const f of plan.fixtures) draft.fixtures.push({ id: newId(f.week, f.home, f.away), ...f, result: null });
+    tab = 'fixtures';
+    refresh();
+  };
+  preview();
+}
+
+// ---------- Players ----------
+
+const POSITIONS = ['GK', 'DEF', 'MID', 'FWD'];
+let playerTeam = 'all';
+
+function playersTab(body) {
+  draft.players = draft.players || [];
+  const teams = draft.teams, known = new Set(teams.map(t => t.code)), free = p => !known.has(p.team);
+  const shown = draft.players.filter(p => playerTeam === 'all' || (playerTeam === '__free' ? free(p) : p.team === playerTeam))
+    .sort((a, b) => a.team.localeCompare(b.team) || POSITIONS.indexOf(a.position) - POSITIONS.indexOf(b.position) || a.name.localeCompare(b.name));
+  const squad = teams.map(t => {
+    const ps = draft.players.filter(p => p.team === t.code), gk = ps.filter(p => p.position === 'GK').length;
+    const ok = ps.length >= 11 && gk >= 1;
+    return `<span class="squad-chip ${ok ? '' : 'bad'}" title="${ok ? 'Ready to simulate' : 'Needs at least 11 players including a goalkeeper to simulate'}">${esc(t.code)} ${ps.length}${gk ? '' : ' · no GK'}</span>`;
+  }).join('') + (draft.players.some(free) ? `<span class="squad-chip free">Free agents ${draft.players.filter(free).length}</span>` : '');
+  const teamSel = (sel, attrs) => `<select class="ed-select" ${attrs}><option value=""${known.has(sel) ? '' : ' selected'}>Free agent</option>${teams.map(t => `<option value="${esc(t.code)}"${t.code === sel ? ' selected' : ''}>${esc(t.code)}</option>`).join('')}</select>`;
+  const posSel = (sel, attrs) => `<select class="ed-select" ${attrs}>${POSITIONS.map(x => `<option${x === sel ? ' selected' : ''}>${x}</option>`).join('')}</select>`;
+  body.innerHTML = `<div class="ed-section"><h3>Squads</h3><div class="squads">${squad || '<span class="ed-hint">No teams yet.</span>'}</div>
+    <p class="ed-hint">Ratings are 1 to 10. Each team needs at least 11 players, including a goalkeeper, for the simulator. Free agents aren't in any team; set their team to sign them.</p></div>
+    <div class="ed-section"><div class="ed-row" style="justify-content:space-between"><h3>Players</h3>
+      <label class="ed-field" style="width:140px">Show<select class="ed-select" id="pl-filter"><option value="all">All teams</option>${teams.map(t => `<option value="${esc(t.code)}"${t.code === playerTeam ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="__free"${playerTeam === '__free' ? ' selected' : ''}>Free agents</option></select></label></div>
+    <div style="overflow-x:auto"><table class="fx-table pl-table"><thead><tr><th>Name</th><th>Team</th><th>Pos</th><th>Off</th><th>Def</th><th></th></tr></thead><tbody>
+    ${shown.map(p => `<tr data-pid="${esc(p.id)}"><td><input class="ed-input" data-k="name" value="${esc(p.name)}" aria-label="Name"></td>
+      <td>${teamSel(p.team, 'data-k="team" aria-label="Team"')}</td><td>${posSel(p.position, 'data-k="position" aria-label="Position"')}</td>
+      <td><input class="ed-input w" type="number" min="1" max="10" data-k="offense" value="${esc(p.offense)}" aria-label="Offence"></td>
+      <td><input class="ed-input w" type="number" min="1" max="10" data-k="defense" value="${esc(p.defense)}" aria-label="Defence"></td>
+      <td><button class="ed-btn small danger" data-remove-player aria-label="Remove ${esc(p.name)}">✕</button></td></tr>`).join('') || '<tr><td colspan="6" class="ed-hint">No players.</td></tr>'}
+    <tr class="fx-new"><td><input class="ed-input" id="np-name" placeholder="New player name"></td><td>${teamSel(playerTeam === 'all' ? teams[0]?.code : playerTeam === '__free' ? '' : playerTeam, 'id="np-team"')}</td>
+      <td>${posSel('MID', 'id="np-pos"')}</td><td><input class="ed-input w" type="number" min="1" max="10" id="np-off" value="5"></td>
+      <td><input class="ed-input w" type="number" min="1" max="10" id="np-def" value="5"></td><td><button class="ed-btn small primary" id="np-add">+ Add</button></td></tr>
+    </tbody></table></div></div>`;
+  body.querySelector('#pl-filter').onchange = e => { playerTeam = e.target.value; refresh(); };
+  body.onchange = e => {
+    const tr = e.target.closest('tr[data-pid]'), k = e.target.dataset.k;
+    if (!tr || !k) return;
+    const pl = draft.players.find(x => x.id === tr.dataset.pid);
+    let v = e.target.value;
+    if (k === 'offense' || k === 'defense') v = Math.max(1, Math.min(10, Math.round(+v) || 1));
+    if (k === 'name' && !v.trim()) { refresh(); return; }
+    pl[k] = typeof v === 'string' ? v.trim() : v;
+    refresh();
+  };
+  body.onclick = e => {
+    const rm = e.target.closest('[data-remove-player]');
+    if (rm) {
+      const pl = draft.players.find(x => x.id === rm.closest('tr').dataset.pid);
+      if (confirm(`Remove ${pl.name}?`)) { draft.players = draft.players.filter(x => x !== pl); refresh(); }
+      return;
+    }
+    if (!e.target.closest('#np-add')) return;
+    const name = body.querySelector('#np-name').value.trim();
+    if (!name) return alert('Enter the player’s name.');
+    const next = Math.max(-1, ...draft.players.map(x => parseInt(x.id, 10)).filter(Number.isFinite)) + 1;
+    const clamp10 = v => Math.max(1, Math.min(10, Math.round(+v) || 5));
+    draft.players.push({ id: String(next).padStart(4, '0'), name, team: body.querySelector('#np-team').value, position: body.querySelector('#np-pos').value,
+      offense: clamp10(body.querySelector('#np-off').value), defense: clamp10(body.querySelector('#np-def').value) });
+    refresh();
+  };
+}
+
+// ---------- History ----------
+// Every publish is a commit, so the history is the list of commits to the season file.
+
+let historyList = null, historyErr = '';
+
+async function loadHistory() {
+  try {
+    historyList = await gh(`/repos/${REPO}/commits?path=${encodeURIComponent(SEASON_FILE)}&sha=${BRANCH}&per_page=30`);
+    historyErr = '';
+  } catch (e) { historyErr = e.message; }
+  if (tab === 'history' && panel) refresh();
+}
+
+function historyTab(body) {
+  if (!historyList && !historyErr) { body.innerHTML = '<div class="ed-section"><p class="ed-hint">Loading the history…</p></div>'; loadHistory(); return; }
+  const when = iso => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  body.innerHTML = `<div class="ed-section"><div class="ed-row" style="justify-content:space-between"><h3>Change history</h3><button class="ed-btn small" id="hist-reload">Refresh</button></div>
+    <p class="ed-hint">Every saved change is listed here. Restore puts the league back exactly as it was then, including match files, and publishes it. You can undo a restore by restoring the version above it.</p>
+    ${historyErr ? `<p class="ed-err">${esc(historyErr)}</p>` : ''}
+    <div class="hist">${(historyList || []).map((c, i) => `<div class="hist-row"><div><b>${esc(c.commit.message.split('\n')[0].replace(/^Edit mode: /, ''))}</b><span class="ed-hint">${esc(when(c.commit.author.date))}${i === 0 ? ' · current version' : ''}</span></div>
+      ${i === 0 ? '' : `<button class="ed-btn small" data-restore="${esc(c.sha)}" data-when="${esc(when(c.commit.author.date))}">Restore</button>`}</div>`).join('')}</div></div>`;
+  body.querySelector('#hist-reload').onclick = () => { historyList = null; historyErr = ''; refresh(); };
+  body.onclick = e => {
+    const b = e.target.closest('[data-restore]');
+    if (b) restoreVersion(b.dataset.restore, b.dataset.when, b);
+  };
+}
+
+async function restoreVersion(sha, when, btn) {
+  if (publishing) return alert('Wait for the current save to finish, then try again.');
+  if (!confirm(`Put the league back to how it was on ${when}? Anything changed since then is replaced (you can restore it again from this list).`)) return;
+  btn.disabled = true; btn.textContent = 'Restoring…';
+  try {
+    const raw = await fetch(`https://api.github.com/repos/${REPO}/contents/${SEASON_FILE}?ref=${sha}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' }, cache: 'no-store',
+    });
+    if (!raw.ok) throw new Error(`GitHub: couldn't read that version (${raw.status})`);
+    const old = await raw.json();
+    // Bring back any match files that have been deleted since.
+    const wanted = [...new Set((old.fixtures || []).map(f => f.file).filter(Boolean))];
+    if (wanted.length) {
+      const now = new Set((await gh(`/repos/${REPO}/git/trees/${BRANCH}?recursive=1`)).tree.map(x => x.path));
+      const missing = wanted.filter(path => !now.has(path));
+      if (missing.length) {
+        const then = new Map((await gh(`/repos/${REPO}/git/trees/${sha}?recursive=1`)).tree.map(x => [x.path, x.sha]));
+        let n = 0;
+        for (const path of missing) {
+          btn.textContent = `Restoring files ${++n}/${missing.length}…`;
+          if (!then.has(path)) continue;
+          const b = await gh(`/repos/${REPO}/git/blobs/${then.get(path)}`);
+          const blob = new Blob([unb64(b.content.replace(/\n/g, ''))], { type: 'application/gzip' });
+          uploads.set(path, blob); localFiles.set(path, blob);
+        }
+      }
+    }
+    old.updated = draft.updated;
+    draft = old;
+    nextMessage = `Edit mode: restore the version from ${when}`;
+    historyList = null;
+    tab = 'fixtures';
+    refresh();
+  } catch (e) {
+    alert(`Couldn't restore: ${e.message}`);
+    btn.disabled = false; btn.textContent = 'Restore';
+  }
+}
+
+// What changed between two versions, in words, for the commit message and history list.
+let nextMessage = null;
+function describeChanges(a, b, files) {
+  const parts = [];
+  const diff = (key, id, label) => {
+    const A = new Map((a[key] || []).map(x => [id(x), JSON.stringify(x)])), B = new Map((b[key] || []).map(x => [id(x), JSON.stringify(x)]));
+    let add = 0, chg = 0, rem = 0;
+    for (const [k, v] of B) if (!A.has(k)) add++; else if (A.get(k) !== v) chg++;
+    for (const k of A.keys()) if (!B.has(k)) rem++;
+    const say = (n, verb) => n && parts.push(`${n} ${label}${n > 1 ? 's' : ''} ${verb}`);
+    say(add, 'added'); say(chg, 'edited'); say(rem, 'removed');
+  };
+  diff('fixtures', f => f.id, 'fixture');
+  diff('teams', t => t.code, 'team');
+  diff('players', pl => pl.id, 'player');
+  if (['season', 'live_minutes', 'notice', 'points'].some(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]))) parts.push('settings changed');
+  const logos = files.filter(([path]) => path.startsWith('assets/')).length;
+  if (logos) parts.push(`${logos} logo${logos > 1 ? 's' : ''} uploaded`);
+  return parts.join(', ') || 'saved';
 }
 
 // Teams and players that appear in a match file but not yet in the season are added.
@@ -479,7 +779,7 @@ function ensureTeams(d) {
   }
   draft.players = draft.players || [];
   for (const p of d.players) {
-    if (draft.players.some(x => x.id === p.id)) continue;
+    if (draft.players.some(x => String(x.id) === String(p.id))) continue;
     const a = p.attributes || {};
     const off = Math.round(((a.finishing ?? 50) + (a.dribbling ?? 50) + (a.passing ?? 50)) / 30);
     const dfn = p.position === 'GK' ? Math.round((a.reflexes ?? 50) / 10) : Math.round(((a.tackling ?? 50) + (a.marking ?? 50)) / 20);
@@ -581,7 +881,7 @@ function showState() {
 
 function scheduleAutoPublish() {
   clearTimeout(autoTimer);
-  if (!token || !pendingCount() || autoBlocked) return;
+  if (!token || !pendingCount() || autoBlocked || holdAuto) return;
   autoTimer = setTimeout(() => publish(), AUTO_DELAY);
   if (panel) showState();
 }
@@ -612,7 +912,7 @@ async function publish() {
     const removed = base.fixtures.map(f => f.file).filter(path => path && !referenced.has(path));
     const files = [...sentUploads].filter(([path]) => !path.startsWith(MATCH_DIR) || referenced.has(path));
     files.push([SEASON_FILE, new Blob([JSON.stringify(snap)], { type: 'application/json' })]);
-    const msg = `Edit mode: update league (${snap.fixtures.length} fixtures, ${files.length - 1} file${files.length === 2 ? '' : 's'})`;
+    const msg = nextMessage || `Edit mode: ${describeChanges(base, snap, files)}`;
     // Straight after a previous publish GitHub can briefly report the old branch tip, which makes
     // the new commit look out of date. Wait a moment and try again.
     for (let attempt = 1; ; attempt++) {
@@ -624,6 +924,8 @@ async function publish() {
       }
     }
     base = snap;
+    nextMessage = null;
+    historyList = null;
     for (const [path, blob] of sentUploads) if (uploads.get(path) === blob) uploads.delete(path);
     (window.hclPublished ||= new Set()).add(snap.updated);
     watchLive(snap.updated);
