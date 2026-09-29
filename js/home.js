@@ -1,48 +1,41 @@
-import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, ladderWithMovement, playerTotals, sameDay } from './data.js';
-import { $, esc, logo, watermark, fmtDate, fmtTime, countdown, statusPill, safeColour, matchUrl } from './ui.js';
+import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, ladderWithMovement, playerTotals, liveSimTime, clockAt } from './data.js';
+import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, matchUrl } from './ui.js';
 
 let S, T;
 
-function matchCard(fx, i = 0, big = false) {
+// One row per fixture. Every match appears exactly once on the page, in its week.
+function matchRow(fx) {
   const h = T[fx.home] || { code: fx.home, name: fx.home }, a = T[fx.away] || { code: fx.away, name: fx.away };
   const st = status(fx, S), k = kickoff(fx), sc = shownScore(fx, S);
-  const mid = sc ? `<span class="score-box">${sc.home} - ${sc.away}</span>` : '<span class="vs">VS</span>';
-  const cd = st === 'upcoming' && k ? `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>` : '';
-  const btn = st === 'live' ? '▶ Watch live' : st === 'ft' ? '▶ Watch match' : 'Match centre';
-  const size = big ? 72 : 38;
-  return `<a class="match-card${big ? ' spotlight-card' : ''}" href="${matchUrl(fx)}" style="--h-color:${esc(safeColour(h.colour))};--a-color:${esc(safeColour(a.colour))};animation-delay:${(i % 10) * 40}ms">
-    ${watermark(h.code, 'home')}${watermark(a.code, 'away')}
-    <div class="mc-top"><span>Week ${esc(fx.week)}</span><span>${esc(fmtDate(k))} · ${esc(fmtTime(k))}</span></div>
-    <div class="mc-grid">
-      <div class="mc-side">${logo(h, size)}<div style="min-width:0"><div class="mc-code">${esc(h.code)}</div><div class="mc-name">${esc(h.name)}</div></div></div>
-      <div class="mc-mid">${statusPill(st)}${mid}${cd}</div>
-      <div class="mc-side away">${logo(a, size)}<div style="min-width:0"><div class="mc-code">${esc(a.code)}</div><div class="mc-name">${esc(a.name)}</div></div></div>
-    </div>
-    <div class="mc-foot"><span class="watch-btn">${btn}</span></div>
+  let mid;
+  if (sc) {
+    const clock = st === 'live' ? `<span class="countdown" style="color:var(--live)">${esc(clockAt(fx.result.periods, liveSimTime(fx, S)))}</span>` : '';
+    mid = `<span class="score">${sc.home} - ${sc.away}</span>${clock}`;
+  } else {
+    const soon = st === 'upcoming' && k && k - new Date() < 86400000;
+    mid = `<span class="kick">${esc(fmtTime(k))}</span>${soon ? `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>` : ''}`;
+  }
+  const team = (t, side) => {
+    const name = `<span class="m-name"><b>${esc(t.code)}</b><small>${esc(t.name)}</small></span>`;
+    return `<span class="m-team ${side}">${side === 'home' ? name + logo(t, 36) : logo(t, 36) + name}</span>`;
+  };
+  return `<a class="match${st === 'live' ? ' is-live' : ''}" href="${matchUrl(fx)}" style="--h:${esc(safeColour(h.colour))};--a:${esc(safeColour(a.colour))}" aria-label="${esc(h.name)} v ${esc(a.name)}">
+    <div class="m-meta"><span>${esc(dayLabel(k))}</span>${statusPill(st)}</div>
+    <div class="m-row">${team(h, 'home')}<span class="m-mid">${mid}</span>${team(a, 'away')}</div>
   </a>`;
 }
 
-function renderSpotlight() {
-  const now = new Date();
+// One line of text under the title: what's happening right now.
+function renderHero() {
   const fx = [...S.fixtures].sort(byKickoff);
-  const live = fx.filter(f => status(f, S, now) === 'live');
-  const next = fx.find(f => status(f, S, now) === 'upcoming');
-  const last = fx.filter(f => status(f, S, now) === 'ft').pop();
-  const pick = live[0] || next || last;
-  const label = live.length ? '<span class="pulse"></span>Live now' : next ? 'Next up' : 'Latest result';
-  $('#spotlight').innerHTML = pick
-    ? `<p class="spot-label">${label}</p><div class="spotlight">${matchCard(pick, 0, true)}</div>`
-    : '<p class="empty">No fixtures yet.</p>';
-}
-
-function renderToday() {
-  const now = new Date(), tomorrow = new Date(now.getTime() + 86400000);
-  const blocks = [['Today’s matches', now], ['Tomorrow’s matches', tomorrow]].map(([title, day]) => {
-    const list = S.fixtures.filter(f => sameDay(kickoff(f), day)).sort(byKickoff);
-    return list.length ? `<h2 class="section-title">${title}</h2><div class="week-block">${list.map(matchCard).join('')}</div>` : '';
-  }).join('');
-  $('#today-block').innerHTML = blocks;
-  $('#today-block').hidden = !blocks;
+  const live = fx.filter(f => status(f, S) === 'live');
+  const next = fx.find(f => status(f, S) === 'upcoming');
+  const name = f => `${T[f.home]?.name || f.home} v ${T[f.away]?.name || f.away}`;
+  let text;
+  if (live.length) text = `<span class="pulse" style="color:var(--live)"></span> ${live.length === 1 ? `Live now: ${esc(name(live[0]))}` : `${live.length} matches live now`}`;
+  else if (next) text = `Next match: ${esc(name(next))}, ${esc(dayLabel(kickoff(next)))} at ${esc(fmtTime(kickoff(next)))}`;
+  else text = fx.length ? 'All matches played.' : 'Fixtures coming soon.';
+  $('#hero-status').innerHTML = text;
 }
 
 function renderWeeks(selected) {
@@ -53,28 +46,21 @@ function renderWeeks(selected) {
   const sel = tabs.querySelector('[aria-selected="true"]');
   if (sel) tabs.scrollLeft = sel.offsetLeft - (tabs.clientWidth - sel.clientWidth) / 2;
   const list = S.fixtures.filter(f => String(f.week ?? 'TBA') === String(selected)).sort(byKickoff);
-  $('#week-list').innerHTML = list.map(matchCard).join('') || '<p class="empty">No matches this week.</p>';
+  $('#week-list').innerHTML = list.map(matchRow).join('') || '<p class="empty">No matches this week.</p>';
 }
 
 function renderLadder() {
   const rows = ladderWithMovement(S);
   const played = S.fixtures.filter(f => status(f, S) === 'ft').length;
   $('#games-played').textContent = played ? `${played} played` : '';
-  $('#board').innerHTML = rows.map(r => {
-    const mv = r.move > 0 ? `<span class="move up">▲${r.move}</span>` : r.move < 0 ? `<span class="move down">▼${-r.move}</span>` : '<span class="move same">– 0</span>';
-    return `<div class="board-row" style="--tc:${esc(safeColour(r.team.colour))}">
-      <img class="wm-row" src="assets/teams/${esc(r.team.code.toLowerCase())}-alt.png" alt="" onerror="this.remove()">
-      <span class="board-pos">${r.rank}</span>
-      <span class="logo-tile">${logo(r.team, 28)}</span>
-      <span class="board-name"><b>${esc(r.team.code)}</b><span>${esc(r.team.name)}</span></span>
-      ${mv}<span class="pts ${r.rank <= 4 ? 'top4' : ''}">${r.pts} PTS</span>
-    </div>`;
+  $('#ladder-body').innerHTML = rows.map(r => {
+    const mv = r.move > 0 ? `<small class="up">▲${r.move}</small>` : r.move < 0 ? `<small class="down">▼${-r.move}</small>` : '';
+    return `<tr class="${r.rank === 4 && rows.length > 4 ? 'cut' : ''}" style="--tc:${esc(safeColour(r.team.colour))}">
+      <td class="pos">${r.rank}${mv}</td>
+      <td class="t"><div>${logo(r.team, 28)}<span style="min-width:0"><b>${esc(r.team.code)}</b><small>${esc(r.team.name)}</small></span></div></td>
+      <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="pts">${r.pts}</td>
+      <td class="form"><div class="form-dots">${r.form.map(o => `<i class="${o}">${o}</i>`).join('') || '<span class="muted">–</span>'}</div></td></tr>`;
   }).join('');
-  $('#ladder-body').innerHTML = rows.map(r => `<tr style="--tc:${esc(safeColour(r.team.colour))}">
-    <td><b>${r.rank}</b></td><td class="t"><div>${logo(r.team, 26)}${esc(r.team.name)}</div></td>
-    <td>${r.p}</td><td class="wide">${r.w}</td><td class="wide">${r.d}</td><td class="wide">${r.l}</td>
-    <td class="wide">${r.gf}</td><td class="wide">${r.ga}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td><b>${r.pts}</b></td>
-    <td class="wide"><div class="form-dots">${r.form.map(o => `<i class="${o}">${o}</i>`).join('') || '<span class="muted">–</span>'}</div></td></tr>`).join('');
 }
 
 function renderScorers() {
@@ -85,17 +71,17 @@ function renderScorers() {
 
 function renderAll() {
   T = teamMap(S);
-  $('#season-label').textContent = `Season ${['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][S.season] || S.season}`;
+  $('#season-label').textContent = `Season ${S.season}`;
+  $('#hero-eyebrow').textContent = `Season ${S.season}`;
   const n = $('#notice');
   n.hidden = !S.notice;
   n.textContent = S.notice || '';
-  renderSpotlight();
-  renderToday();
+  renderHero();
   const current = document.querySelector('#week-tabs [aria-selected="true"]')?.dataset.week;
   renderWeeks(current ?? activeWeek(S));
   renderLadder();
   renderScorers();
-  $('#updated').textContent = S.updated ? `Updated ${new Date(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
+  $('#updated').textContent = S.updated ? `· Updated ${new Date(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
 }
 
 async function init() {
@@ -103,10 +89,11 @@ async function init() {
     S = await loadSeason();
     renderAll();
   } catch (e) {
-    $('#spotlight').innerHTML = `<p class="empty">Couldn't load the league data. ${esc(e.message)}</p>`;
+    $('#week-list').innerHTML = `<p class="empty">Couldn't load the league data. ${esc(e.message)}</p>`;
+    $('#hero-status').textContent = '';
     return;
   }
-  // Tick countdowns; re-render when a match changes state (kick-off, full time).
+  // Tick countdowns; re-render when a match changes state (kick-off, full time) or while one is live.
   let sig = S.fixtures.map(f => status(f, S)).join();
   setInterval(() => {
     document.querySelectorAll('.countdown[data-kickoff]').forEach(el => { el.textContent = countdown(new Date(+el.dataset.kickoff)); });

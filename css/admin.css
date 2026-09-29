@@ -1,11 +1,14 @@
 /* League edit mode */
+/* Locked: a quiet link in the footer. Unlocked: a floating button. */
 .edit-toggle {
-  position: fixed; top: 14px; right: 14px; z-index: 40; display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px; border-radius: 999px; font-size: .75rem; font-weight: 800; cursor: pointer;
-  background: rgba(15,17,21,.75); border: 1px solid var(--glass-border); backdrop-filter: blur(10px); color: var(--muted);
+  padding: 4px 0; border: 0; background: none; font-size: .78rem; font-weight: 600; color: var(--faint); cursor: pointer;
 }
-.edit-toggle:hover { color: var(--text); border-color: rgba(255,255,255,.25); }
-.edit-toggle.on { color: #0f1115; background: var(--brand-grad); border-color: transparent; }
+.edit-toggle:hover { color: var(--text); text-decoration: underline; }
+.edit-toggle.on {
+  position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 40;
+  display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-size: .82rem; font-weight: 800;
+  color: #0f1115; background: var(--brand-grad); box-shadow: 0 10px 30px rgba(0,0,0,.5); text-decoration: none;
+}
 .edit-toggle .badge { background: #ef4444; color: #fff; border-radius: 999px; padding: 0 6px; font-size: .68rem; }
 
 .ed-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(5,6,8,.75); backdrop-filter: blur(4px); padding: 16px; }

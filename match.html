@@ -16,13 +16,19 @@
   <script type="module" src="js/admin.js"></script>
 </head>
 <body>
-  <div class="grid-bg" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html"><img src="assets/league/logo.png" alt="" onerror="this.remove()"><span><b><span class="long">Heineken C League</span><span class="short">HCL</span></b><small>Season 3</small></span></a>
+      <nav class="nav" aria-label="Site">
+        <a href="index.html" aria-current="page">Matches</a>
+        <a href="index.html#table">Table</a>
+        <a href="awards.html">Awards</a>
+      </nav>
+    </div>
+  </header>
   <div class="app">
-    <a class="back-link" href="index.html">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-      Back to matches
-    </a>
-    <div id="mount"><div class="card loading"><div class="spinner"></div>Loading match details…</div></div>
+    <div id="mount"><div class="card loading"><div class="spinner"></div>Loading match…</div></div>
+    <footer class="site-footer"><span>Heineken C League · Season 3</span></footer>
   </div>
 </body>
 </html>

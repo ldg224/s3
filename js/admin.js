@@ -92,7 +92,7 @@ const strip = s => ({ ...s, updated: null });
 function updateToggle() {
   const n = pendingCount();
   toggle.classList.toggle('on', !!token);
-  toggle.innerHTML = token ? `✎ Edit mode${n ? ` <span class="badge">${n}</span>` : ''}` : '🔒 Edit';
+  toggle.innerHTML = token ? `✎ Edit mode${n ? ` <span class="badge">${n}</span>` : ''}` : 'Editor login';
 }
 
 function modal(html) {
@@ -367,15 +367,13 @@ function ensureTeams(d) {
 
 function teamsTab(body) {
   body.innerHTML = `<div class="ed-section"><h3>Teams</h3>
-    <p class="ed-hint">Logos are optional PNGs (square, transparent background works best). The watermark logo is used in the faint background art.</p>
+    <p class="ed-hint">Logos are optional PNGs (square, transparent background works best).</p>
     ${draft.teams.map((t, i) => `<div class="team-edit" data-i="${i}">
       <input class="ed-input" value="${esc(t.code)}" disabled aria-label="Code">
       <input class="ed-input" data-k="name" value="${esc(t.name)}" aria-label="Team name">
       <input class="ed-input" data-k="manager" value="${esc(t.manager || '')}" placeholder="Manager" aria-label="Manager">
       <input type="color" data-k="colour" value="${esc(safeColour(t.colour).length === 7 ? t.colour : '#475569')}" aria-label="Colour">
-      <div class="ed-row" style="flex-wrap:nowrap">
-        <label class="ed-btn small">Logo<input type="file" accept="image/png" data-logo="" hidden></label>
-        <label class="ed-btn small">Watermark<input type="file" accept="image/png" data-logo="-alt" hidden></label></div></div>`).join('')}
+      <label class="ed-btn small">Logo<input type="file" accept="image/png" data-logo="" hidden></label></div>`).join('')}
     <h3 style="margin-top:8px">Add a team</h3>
     <div class="team-edit"><input class="ed-input" id="nt-code" maxlength="4" placeholder="CODE"><input class="ed-input" id="nt-name" placeholder="Team name">
       <input class="ed-input" id="nt-man" placeholder="Manager"><input type="color" id="nt-col" value="#34d399"><button class="ed-btn small primary" id="nt-add">+ Add</button></div></div>`;
@@ -475,7 +473,7 @@ async function publish() {
 
 function boot() {
   toggle = el('<button class="edit-toggle" type="button" aria-label="League edit mode"></button>');
-  document.body.appendChild(toggle);
+  (document.querySelector('.site-footer') || document.body).appendChild(toggle);
   try { token = sessionStorage.getItem(SESSION); } catch { token = null; }
   updateToggle();
   toggle.onclick = () => (token ? startEditing() : openUnlock());

@@ -14,12 +14,18 @@ export function logo(team, size = 38) {
     + `<span class="logo-fallback" style="width:100%;height:100%">${esc(code.slice(0, 3))}</span>`
     + `<img class="logo" src="${esc(logoPath(code))}" alt="" style="position:absolute;inset:0;width:100%;height:100%" onerror="this.remove()"></span>`;
 }
-export const watermark = (code, side) => `<img class="wm ${side}" src="${esc(logoPath(code, true))}" alt="" onerror="this.remove()">`;
 
 const dfmt = new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
 const tfmt = new Intl.DateTimeFormat('en-AU', { hour: 'numeric', minute: '2-digit' });
 export const fmtDate = d => (d ? dfmt.format(d) : 'Date TBA');
 export const fmtTime = d => (d ? tfmt.format(d) : 'TBA');
+// 'Today', 'Tomorrow', 'Yesterday' or a short date.
+export function dayLabel(d, now = new Date()) {
+  if (!d) return 'Date TBA';
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(d) - day(now)) / 86400000);
+  return { 0: 'Today', 1: 'Tomorrow', [-1]: 'Yesterday' }[diff] || fmtDate(d);
+}
 
 export function countdown(target, now = new Date()) {
   const ms = target - now;

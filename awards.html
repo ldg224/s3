@@ -12,10 +12,10 @@
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/admin.css">
   <style>
-    .awards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 24px; }
+    .awards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 20px; }
     .award { text-align: center; padding: 28px 22px; transition: transform .3s, border-color .3s; }
     .award::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--gold); }
-    .award::after { content: ''; position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; background: radial-gradient(circle, rgba(245,158,11,.2) 0%, transparent 60%); opacity: .5; pointer-events: none; }
+    .award::after { display: none; content: ''; position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; background: radial-gradient(circle, rgba(245,158,11,.2) 0%, transparent 60%); opacity: .5; pointer-events: none; }
     .award > * { position: relative; z-index: 1; }
     .award:hover { transform: translateY(-4px); border-color: rgba(251,191,36,.4); }
     .award-icon { width: 72px; height: 72px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; border: 2px solid rgba(251,191,36,.6); box-shadow: inset 0 0 18px rgba(245,158,11,.35); background: rgba(0,0,0,.25); }
@@ -43,19 +43,21 @@
   <script type="module" src="js/admin.js"></script>
 </head>
 <body>
-  <div class="grid-bg" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html"><img src="assets/league/logo.png" alt="" onerror="this.remove()"><span><b><span class="long">Heineken C League</span><span class="short">HCL</span></b><small>Season 3</small></span></a>
+      <nav class="nav" aria-label="Site">
+        <a href="index.html">Matches</a>
+        <a href="index.html#table">Table</a>
+        <a href="awards.html" aria-current="page">Awards</a>
+      </nav>
+    </div>
+  </header>
   <div class="app">
-    <a class="back-link" href="index.html">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-      Back to matches
-    </a>
-    <header class="site-header">
-      <div class="header-panel">
-        <p class="eyebrow gold">Season honours · live race</p>
-        <h1>League Awards</h1>
-        <p>Updated automatically after every full-time whistle.</p>
-      </div>
-      <div class="header-side"><img class="header-logo" src="assets/league/logo.png" alt="" onerror="this.remove()"></div>
+    <header class="page-head">
+      <p class="eyebrow gold">Season 3 honours</p>
+      <h1>League awards</h1>
+      <p>Updated automatically after every full-time whistle.</p>
     </header>
     <div class="awards-grid" id="awards"><div class="loading"><div class="spinner" style="border-top-color:#fbbf24"></div>Calculating award winners…</div></div>
     <section class="card">
@@ -67,6 +69,7 @@
         </table>
       </div>
     </section>
+    <footer class="site-footer"><span>Heineken C League · Season 3</span></footer>
   </div>
 </body>
 </html>
