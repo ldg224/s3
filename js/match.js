@@ -15,6 +15,7 @@ function findFixture() {
 
 const roster = code => (S.players || []).filter(p => p.team === code).sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position) || a.name.localeCompare(b.name));
 const shirt = p => String(p.id).slice(-2);
+const BALL = '<svg class="ball-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fff"/><path d="M12 7.5l3.8 2.8-1.5 4.4H9.7L8.2 10.3z" fill="#111"/><path d="M12 2v5.5M22 10l-6.2.3M2 10l6.2.3M17.5 20l-3.2-5.3M6.5 20l3.2-5.3" stroke="#111" stroke-width="1.3" fill="none"/></svg>';
 
 // Events visible now (hides the future while a match is live).
 function visibleTime() {
@@ -85,7 +86,7 @@ function timelineCard() {
     const text = e.kind === 'goal'
       ? `<span>${esc(e.scorer_name || 'Unknown')}${e.own_goal ? ' (OG)' : ''}${e.assist_name ? `<span class="tl-sub">Assist: ${esc(e.assist_name)}</span>` : ''}</span>`
       : `<span>${esc(e.name)}<span class="tl-sub">${e.card === 'yellow' ? 'Yellow card' : e.card === 'second_yellow' ? 'Second yellow' : 'Red card'}</span></span>`;
-    const icon = e.kind === 'goal' ? '⚽' : e.card === 'yellow' ? '🟨' : '🟥';
+    const icon = e.kind === 'goal' ? BALL : `<i class="card-ico ${e.card === 'yellow' ? 'yellow' : 'red'}"></i>`;
     return `<div class="tl-row" data-t="${e.t}">
       <div class="side home">${home ? text + chip : ''}</div><div class="tl-icon">${icon}</div><div class="side">${home ? '' : chip + text}</div></div>`;
   }).join('');
@@ -121,7 +122,7 @@ function rosterCard() {
     const rows = roster(code).map(p => {
       const r = played ? FX.result.players[p.id]?.r : null;
       const rc = r == null ? '' : r >= 7.5 ? '#34d399' : r >= 6.5 ? '#fbbf24' : '#f87171';
-      return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span title="Goals">${'⚽'.repeat(goalsBy[p.id])}</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}">${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
+      return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span class="goal-dots" title="Goals">${BALL.repeat(goalsBy[p.id])}</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}">${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
     }).join('');
     return `<div><div class="team-head" style="--tc:${esc(col)}"><i></i>${esc(code)} lineup</div>
       <table class="roster"><thead><tr><th>#</th><th>Name</th><th>Pos</th><th>Off</th><th>Def</th>${played ? '<th style="text-align:right">Rating</th>' : ''}</tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty">No players listed.</td></tr>'}</tbody></table></div>`;
@@ -174,7 +175,7 @@ async function startReplay(st) {
   const shown = matchData.events.filter(e => ['goal', 'shot', 'save', 'card', 'penalty', 'woodwork', 'offside'].includes(e.type));
   const names = Object.fromEntries(matchData.players.map(p => [p.id, p.name]));
   const caption = $('#caption');
-  const label = e => e.type === 'goal' ? `⚽ GOAL! ${names[e.scorer] || ''}${e.own_goal ? ' (OG)' : ''} · ${e.score.join('-')}`
+  const label = e => e.type === 'goal' ? `GOAL! ${names[e.scorer] || ''}${e.own_goal ? ' (OG)' : ''} · ${e.score.join('-')}`
     : e.type === 'shot' ? `Shot · ${names[e.player]} · ${e.outcome}` : e.type === 'save' ? `Save · ${names[e.player]}`
     : e.type === 'card' ? `${e.card === 'yellow' ? '🟨' : '🟥'} ${names[e.player]}` : e.type === 'woodwork' ? 'Off the woodwork!' : e.type === 'penalty' ? 'Penalty!' : `Offside · ${names[e.player]}`;
   replay = new Replay(cv, matchData, {

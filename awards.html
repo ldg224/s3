@@ -12,31 +12,31 @@
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/admin.css">
   <style>
-    .awards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 20px; }
-    .award { text-align: center; padding: 28px 22px; transition: transform .3s, border-color .3s; }
-    .award::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--gold); }
-    .award::after { display: none; content: ''; position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; background: radial-gradient(circle, rgba(245,158,11,.2) 0%, transparent 60%); opacity: .5; pointer-events: none; }
-    .award > * { position: relative; z-index: 1; }
-    .award:hover { transform: translateY(-4px); border-color: rgba(251,191,36,.4); }
-    .award-icon { width: 72px; height: 72px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; border: 2px solid rgba(251,191,36,.6); box-shadow: inset 0 0 18px rgba(245,158,11,.35); background: rgba(0,0,0,.25); }
-    .award h2 { margin: 0; font-size: 1.35rem; font-weight: 900; background: var(--gold); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-    .award .sub { font-size: .7rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 800; margin-top: 4px; }
-    .winner { margin: 18px 0 14px; padding: 16px; border-radius: 18px; background: rgba(255,255,255,.04); border: 1px solid var(--glass-border); }
-    .stat-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-weight: 900; font-size: .78rem; background: var(--gold); color: #1a1205; }
-    .winner .who { font-size: 1.45rem; font-weight: 900; margin: 8px 0 4px; }
-    .team-line { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); font-weight: 700; }
-    .team-line i { width: 9px; height: 9px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 8px var(--tc); }
-    .runners { display: grid; gap: 6px; text-align: left; }
-    .runner { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.03); font-size: .86rem; }
-    .runner i { width: 8px; height: 8px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 6px var(--tc); flex: none; }
-    .runner small { color: var(--muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .5px; }
-    .runner b { margin-left: auto; font-variant-numeric: tabular-nums; }
+    .awards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; }
+    .award { display: grid; gap: 14px; align-content: start; }
+    .award::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--gold); }
+    .award-head { display: flex; align-items: center; gap: 12px; }
+    .award-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--gold-solid); background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.3); }
+    .award-icon svg { width: 22px; height: 22px; }
+    .award h2 { margin: 0; font-size: 1.05rem; font-weight: 800; line-height: 1.2; }
+    .award .sub { font-size: .75rem; color: var(--muted); font-weight: 600; }
+    .winner { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: var(--r-md); background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(255,255,255,.02)); border: 1px solid rgba(251,191,36,.22); }
+    .winner .who { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+    .winner .team { font-size: .78rem; color: var(--muted); font-weight: 600; }
+    .winner .val { margin-left: auto; text-align: right; flex: none; }
+    .winner .val b { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1; color: var(--gold-solid); font-variant-numeric: tabular-nums; }
+    .winner .val span { font-size: .66rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .6px; }
+    .runners { display: grid; }
+    .runner { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: .88rem; border-top: 1px solid var(--line); }
+    .runner .rk { width: 16px; color: var(--faint); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .runner small { color: var(--muted); font-size: .72rem; margin-left: 4px; }
+    .runner b { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; }
     .leaders { width: 100%; border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; }
-    .leaders th { font-size: .66rem; color: var(--muted); letter-spacing: .5px; text-align: right; padding: 6px; }
+    .leaders th { font-size: .66rem; color: var(--muted); letter-spacing: .5px; text-align: right; padding: 6px; font-weight: 800; }
     .leaders th:nth-child(2), .leaders td:nth-child(2) { text-align: left; }
-    .leaders td { padding: 8px 6px; border-top: 1px solid rgba(255,255,255,.05); text-align: right; }
-    .leaders td:nth-child(2) { display: flex; align-items: center; gap: 8px; font-weight: 700; }
-    .leaders td:nth-child(2) i { width: 8px; height: 8px; border-radius: 50%; background: var(--tc); flex: none; }
+    .leaders td { padding: 9px 6px; border-top: 1px solid var(--line); text-align: right; }
+    .leaders td:nth-child(2) { font-weight: 700; }
+    .leaders td:nth-child(2) > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
     @media (max-width: 600px) { .leaders .wide { display: none; } }
   </style>
   <script type="module" src="js/awards.js"></script>
@@ -64,7 +64,7 @@
       <h2 class="card-title">Season leaders</h2>
       <div style="overflow-x:auto">
         <table class="leaders">
-          <thead><tr><th>#</th><th>Player</th><th>Apps</th><th>Goals</th><th>Assists</th><th class="wide">Shots</th><th class="wide">xG</th><th class="wide">MOTM</th><th>Avg rating</th></tr></thead>
+          <thead><tr><th>#</th><th>Player</th><th>Apps</th><th>Goals</th><th>Assists</th><th class="wide">Shots</th><th class="wide">xG</th><th class="wide">MOTM</th><th>Rating</th></tr></thead>
           <tbody id="leaders"></tbody>
         </table>
       </div>
