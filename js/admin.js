@@ -306,7 +306,9 @@ function uploadTab(body) {
 function renderUpload(body) {
   const d = pendingFile.data, h = d.teams.home, a = d.teams.away;
   const matching = draft.fixtures.filter(f => f.home === h.code && f.away === a.code);
-  const target = draft.fixtures.find(f => f.id === uploadTarget) || matching.find(f => !f.result) || matching[0];
+  // uploadTarget: a fixture id, '__new' (explicitly a new fixture), or null (pick the best match).
+  const target = uploadTarget === '__new' ? null
+    : draft.fixtures.find(f => f.id === uploadTarget) || matching.find(f => !f.result) || matching[0];
   const opts = draft.fixtures.map(f => `<option value="${esc(f.id)}"${target && f.id === target.id ? ' selected' : ''}>Week ${esc(f.week)} · ${esc(f.home)} v ${esc(f.away)}${f.result ? ' (has file)' : ''}</option>`).join('');
   const mismatch = target && (target.home !== h.code || target.away !== a.code);
   body.querySelector('#upl').innerHTML = `
