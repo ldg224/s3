@@ -95,7 +95,7 @@ button, input, select { font: inherit; color: inherit; }
   .nav a { padding: 8px 9px; font-size: .8rem; }
 }
 
-/* Manager Hub button (top bar) and card (home page) */
+/* Manager Hub button (top bar) */
 .topbar-inner .nav { margin-left: auto; }
 .mgr-btn {
   display: inline-flex; align-items: center; gap: 7px; flex: none; min-height: 36px; padding: 7px 14px; border-radius: 999px; text-decoration: none;
@@ -106,17 +106,6 @@ button, input, select { font: inherit; color: inherit; }
 .mgr-btn[aria-current="page"] { background: var(--brand-grad); color: #0f1115; border-color: transparent; }
 @media (max-width: 719px) { .mgr-btn span { display: none; } .mgr-btn { padding: 0; width: 36px; justify-content: center; } }
 @media (max-width: 419px) { .brand b { display: none; } }
-.mgr-card {
-  display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: var(--r-lg); text-decoration: none;
-  background: linear-gradient(135deg, rgba(143,255,6,.12), rgba(22,25,32,.9) 60%); border: 1px solid rgba(143,255,6,.35); transition: border-color .2s, transform .2s;
-}
-.mgr-card:hover { border-color: var(--brand); transform: translateY(-2px); }
-.mgr-card-icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--brand-grad); color: #0f1115; }
-.mgr-card-icon svg { width: 24px; height: 24px; }
-.mgr-card-text { flex: 1; min-width: 0; }
-.mgr-card-text b { display: block; font-size: 1.02rem; font-weight: 800; }
-.mgr-card-text span { font-size: .82rem; color: var(--muted); }
-.mgr-card-go { font-size: 1.3rem; color: var(--brand); }
 
 /* ---------- Home hero ---------- */
 .hero {
