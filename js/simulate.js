@@ -48,15 +48,45 @@ function checkSquad(season, code) {
   return { team, squad };
 }
 
+// A team's manager file (data/teams/<CODE>.json, written by the manager portal): formation, tactics,
+// chosen XI and set-piece takers. Missing or unreadable means engine defaults.
+async function managerFile(code) {
+  try {
+    const res = await fetch(new URL(`../data/teams/${code}.json?t=${Date.now()}`, import.meta.url), { cache: 'no-store' });
+    return res.ok ? await res.json() : {};
+  } catch { return {}; }
+}
+
+const FORMATIONS = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2'];
+const TACTICS = ['tempo', 'pressing', 'width', 'line_height', 'directness'];
+
+// The engine's tactics input for one team, using only players who are available for this match.
+// Chosen players who are suspended or no longer in the squad are dropped; the engine fills their slots.
+function managerTactics(file, available) {
+  const ok = id => id != null && available.has(String(id));
+  const t = {};
+  if (FORMATIONS.includes(file.formation)) t.formation = file.formation;
+  for (const k of TACTICS) {
+    const v = Number(file.tactics?.[k]);
+    if (file.tactics?.[k] != null && Number.isFinite(v)) t[k] = Math.min(1, Math.max(0, v));
+  }
+  if (t.formation && file.lineup && typeof file.lineup === 'object') {
+    t.lineup = Object.fromEntries(Object.entries(file.lineup).filter(([, id]) => ok(id)).map(([slot, id]) => [slot, String(id)]));
+  }
+  for (const k of ['captain', 'penalties', 'freekicks', 'corners']) if (ok(file[k])) t[k] = String(file[k]);
+  return t;
+}
+
 // The engine's league format, built only from the season's own teams and players.
 // Suspended players (`out`) are left out, so a team can play short-handed.
-function toLeague(season, codes, out = new Set()) {
-  const teams = {}, players = {};
+function toLeague(season, codes, out = new Set(), managers = {}) {
+  const teams = {}, players = {}, tactics = {};
   for (const code of codes) {
     const { team, squad } = checkSquad(season, code);
     const available = squad.filter(p => !out.has(String(p.id)));
     if (available.length < 7) throw new Error(`${team.name} has only ${available.length} players available after suspensions; at least 7 are needed.`);
     teams[code] = { code, name: team.name, manager: team.manager || '', colour: team.colour || '#888888' };
+    tactics[code] = managerTactics(managers[code] || {}, new Set(available.map(p => String(p.id))));
     for (const p of available) {
       players[p.id] = {
         id: String(p.id), name: p.name, team: code, position: (p.position || 'MID').toUpperCase(),
@@ -64,7 +94,7 @@ function toLeague(season, codes, out = new Set()) {
       };
     }
   }
-  return { teams, players, attributes: {}, tactics: {}, schedule: [] };
+  return { teams, players, attributes: {}, tactics, schedule: [] };
 }
 
 export async function simulateFixture(season, fixture, { onProgress, seed } = {}) {
@@ -72,7 +102,10 @@ export async function simulateFixture(season, fixture, { onProgress, seed } = {}
   if (fixture.home === fixture.away) throw new Error('A team can\'t play itself.');
   // Suspended players miss the match (red cards, second yellows and manual bans).
   const suspended = (suspensions(season).get(fixture.id) || []).map(s => ({ player: String(s.player), reason: s.reason }));
-  const league = toLeague(season, [fixture.home, fixture.away], new Set(suspended.map(s => s.player)));   // validates squads before loading anything
+  const out = new Set(suspended.map(s => s.player));
+  toLeague(season, [fixture.home, fixture.away], out);   // validates squads before loading anything
+  const [home, away] = await Promise.all([managerFile(fixture.home), managerFile(fixture.away)]);
+  const league = toLeague(season, [fixture.home, fixture.away], out, { [fixture.home]: home, [fixture.away]: away });
   await start();
   const job = ++jobSeq;
   return new Promise((resolve, reject) => {
