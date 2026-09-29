@@ -1,5 +1,5 @@
 import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, liveSimTime, clockAt } from './data.js';
-import { $, esc, logo, fmtDate, fmtTime, dayLabel, countdown, matchUrl } from './ui.js';
+import { $, esc, logo, parseStamp, fmtDate, fmtTime, dayLabel, countdown, matchUrl } from './ui.js';
 import { STAGE_NAMES, sideTeam } from './league.js';
 
 let S, T;
@@ -84,7 +84,7 @@ function renderAll() {
   renderHero();
   const current = document.querySelector('#week-tabs [aria-selected="true"]')?.dataset.week;
   renderWeeks(current ?? activeWeek(S));
-  $('#updated').textContent = S.updated ? `· Updated ${new Date(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
+  $('#updated').textContent = S.updated ? `· Updated ${parseStamp(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
 }
 
 async function init() {

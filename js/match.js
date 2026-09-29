@@ -1,5 +1,5 @@
 import { loadSeason, teamMap, kickoff, status, shownScore, liveSimTime, liveSpeed, clockAt, ladder, finished, teamForm, resultFor, winChance, loadMatchFile } from './data.js';
-import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onColour, matchUrl } from './ui.js';
+import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onColour, matchUrl, textColour } from './ui.js';
 import { Replay } from './replay.js';
 import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
 
@@ -52,7 +52,7 @@ function scoreboard() {
 function winChanceCard() {
   const w = winChance(S, FX.home, FX.away, FX.id);
   return `<section class="card"><h2 class="card-title">Win chance</h2>
-    <div class="wc-labels"><span style="color:${esc(safeColour(H.colour))}">${esc(H.code)} ${w.home}%</span><span class="muted">Draw ${w.draw}%</span><span style="color:${esc(safeColour(A.colour))}">${esc(A.code)} ${w.away}%</span></div>
+    <div class="wc-labels"><span style="color:${esc(textColour(H.colour))}">${esc(H.code)} ${w.home}%</span><span class="muted">Draw ${w.draw}%</span><span style="color:${esc(textColour(A.colour))}">${esc(A.code)} ${w.away}%</span></div>
     <div class="wc-bar"><span style="width:${w.home}%;background:linear-gradient(90deg,${esc(safeColour(H.colour))},rgba(255,255,255,.2))"></span><span style="width:${w.draw}%;background:rgba(255,255,255,.12)"></span><span style="width:${w.away}%;background:linear-gradient(90deg,rgba(255,255,255,.2),${esc(safeColour(A.colour))})"></span></div>
   </section>`;
 }
@@ -140,7 +140,7 @@ function rosterCard() {
       const rc = r == null ? '' : r >= 7.5 ? '#34d399' : r >= 6.5 ? '#fbbf24' : '#f87171';
       return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span class="goal-dots" title="Goals">${BALL.repeat(goalsBy[p.id])}</span>` : ''}${susp.has(String(p.id)) ? ` <span class="susp" title="${esc(susp.get(String(p.id)))}">Suspended</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}">${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
     }).join('');
-    return `<div><div class="team-head" style="--tc:${esc(col)}"><i></i>${esc(code)} lineup</div>
+    return `<div><div class="team-head" style="--tc:${esc(col)};color:${esc(textColour(col))}"><i></i>${esc(code)} lineup</div>
       <table class="roster"><thead><tr><th>#</th><th>Name</th><th>Pos</th><th>Off</th><th>Def</th>${played ? '<th style="text-align:right">Rating</th>' : ''}</tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty">No players listed.</td></tr>'}</tbody></table></div>`;
   };
   return `<section class="card"><h2 class="card-title">Lineups <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:600">Off / Def ratings out of 10</span></h2><div class="two">${table(FX.home)}${table(FX.away)}</div></section>`;
@@ -151,7 +151,7 @@ function formCard() {
   const col = code => {
     const t = T[code] || {};
     const list = teamForm(S, code, k).reverse().map(f => `<a class="form-item" href="${matchUrl(f)}">${esc(f.home)} <b>${f.result.home} - ${f.result.away}</b> ${esc(f.away)}<span class="res ${resultFor(f, code)}">${resultFor(f, code)}</span></a>`).join('');
-    return `<div><div class="team-head" style="--tc:${esc(safeColour(t.colour))}"><i></i>${esc(t.name || code)}</div><div class="form-list">${list || '<p class="empty">No recent matches</p>'}</div></div>`;
+    return `<div><div class="team-head" style="--tc:${esc(safeColour(t.colour))};color:${esc(textColour(t.colour))}"><i></i>${esc(t.name || code)}</div><div class="form-list">${list || '<p class="empty">No recent matches</p>'}</div></div>`;
   };
   return `<section class="card"><h2 class="card-title">Recent form</h2><div class="two">${col(FX.home)}${col(FX.away)}</div></section>`;
 }

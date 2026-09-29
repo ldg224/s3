@@ -121,6 +121,12 @@ button, input, select { font: inherit; color: inherit; }
 .hero-facts b small { font-size: .75rem; color: var(--muted); font-weight: 700; }
 .hero-facts span { font-size: .66rem; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
 @media (min-width: 600px) { .hero { padding: 32px 36px; } .hero-logo { display: block; } }
+@media (max-width: 479px) {
+  .hero-facts { gap: 6px; flex-wrap: nowrap; }
+  .hero-facts > div { flex: 1 1 0; min-width: 0; padding: 7px 8px; }
+  .hero-facts b { font-size: 1rem; }
+  .hero-facts span { font-size: .58rem; letter-spacing: .4px; }
+}
 .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .72rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--brand); }
 .hero h1 { margin: 4px 0 6px; font-size: clamp(1.7rem, 6vw, 2.6rem); font-weight: 800; letter-spacing: -.6px; line-height: 1.1; }
 .hero p { margin: 0; color: #d1d5db; font-size: .92rem; }

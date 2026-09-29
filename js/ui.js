@@ -47,6 +47,21 @@ export function statusPill(st) {
   return `<span class="pill" style="--pc:${s.colour}">${st === 'live' ? '<span class="pulse"></span>' : ''}${s.label}</span>`;
 }
 
+// Saved timestamps are UTC without a zone ("2026-09-29T07:26:48"); read them as UTC.
+export const parseStamp = s => (s ? new Date(/[zZ]$|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`) : null);
+
+// A team colour made light enough to read as text on the dark background.
+export function textColour(hex) {
+  const c = safeColour(hex).slice(1);
+  const n = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
+  let [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255];
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  if (lum >= 0.42) return safeColour(hex);
+  const t = Math.min(0.75, (0.5 - lum) / (1 - lum) + 0.15);   // blend towards white
+  [r, g, b] = [r, g, b].map(v => Math.round(v + (255 - v) * t));
+  return `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 // Text colour with enough contrast on a team colour.
 export function onColour(hex) {
   const c = safeColour(hex).slice(1);

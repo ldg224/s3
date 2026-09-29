@@ -1,7 +1,7 @@
 // League table page: standings (with movement, form and points adjustments) and top scorers.
 
 import { loadSeason, teamMap, status, ladderWithMovement, playerTotals } from './data.js';
-import { $, esc, logo, safeColour } from './ui.js';
+import { $, esc, logo, parseStamp, safeColour } from './ui.js';
 
 let S, T;
 
@@ -39,7 +39,7 @@ function renderAll() {
   $('#season-label').textContent = `Season ${S.season}`;
   renderLadder();
   renderScorers();
-  $('#updated').textContent = S.updated ? `· Updated ${new Date(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
+  $('#updated').textContent = S.updated ? `· Updated ${parseStamp(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
 }
 
 async function init() {
