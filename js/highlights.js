@@ -1,15 +1,14 @@
 // Highlights video generator. Everything runs in the browser:
 //   picks the best moments from a match file, renders a broadcast-style 1080p video
-//   (3D follow camera, scorebug, goal banners, slow-motion replays, branded transitions,
-//   intro / full-time / player-of-the-match cards), synthesises crowd audio, encodes to MP4
-//   with WebCodecs, and makes a matching thumbnail plus YouTube title and description.
+//   (multi-angle 3D cameras, referee and REF CAM, scorebug, goal banners, branded transitions,
+//   intro / full-time / player-of-the-match cards), encodes a silent MP4 (video only) with
+//   WebCodecs, and makes a matching thumbnail plus YouTube title and description.
 
 import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/+esm';
 import { safeColour, onColour, logoPath } from './ui.js';
 import { kickoff } from './data.js';
 
 export const W = 1920, H = 1080, FPS = 30;
-const SR = 48000;
 const GOAL_Y1 = 30.34, GOAL_Y2 = 37.66, GOAL_H = 2.44;
 const LIME = '#8fff06', LIME2 = '#76d306', YEL = '#d5d915', DARK = '#0f1115';
 const FONT = 'Inter, system-ui, sans-serif';
@@ -952,213 +951,11 @@ export class HighlightsRenderer {
   }
 
   frame(T) { this._T = T; this.draw(T); return this.cv; }
-
-  // ------------------------------------------------ audio cues (output times)
-
-  // The crowd follows the play: a bed whose level rises as the ball nears goal, plus reactions
-  // to every shot, goal, save, foul and card inside each clip.
-  audioCues() {
-    const cues = [];
-    for (let i = 1; i < this.segs.length; i++) cues.push({ type: 'whoosh', t: this.segs[i].start - 0.3 });
-    cues.push({ type: 'boom', t: 0.4 }, { type: 'riser', t: 0 });
-    for (const s of this.segs) {
-      if (s.type === 'clip') {
-        const step = 0.25, n = Math.max(2, Math.ceil(s.dur / step) + 1), vals = new Float32Array(n);
-        for (let i = 0; i < n; i++) {
-          const b = this.fr.at(s.t0 + i * step).ball;
-          const d = Math.min(Math.hypot(b[0], b[1] - 34), Math.hypot(105 - b[0], b[1] - 34));
-          vals[i] = 0.3 + 0.7 * Math.pow(clamp(1 - d / 38, 0, 1), 1.3);
-        }
-        cues.push({ type: 'crowd', t: s.start, dur: s.dur, values: vals });
-        const at = t => s.start + (t - s.t0);
-        const inClip = e => e.t >= s.t0 && e.t <= s.t0 + s.dur;
-        const plan = this.shotsFor(s);
-        for (const e of this.d.events.filter(inClip)) {
-          if (e.type === 'goal') { cues.push({ type: 'cheer', t: at(e.t) }); cues.push({ type: 'applause', t: at(e.t) + 1.8, dur: 5, level: 1 }); }
-          else if (e.type === 'shot' && e.outcome !== 'goal') cues.push({ type: 'ooh', t: at(e.t) + 0.35, level: clamp(0.45 + e.xg * 2 + (e.outcome === 'woodwork' ? 0.5 : 0), 0.4, 1.2) });
-          else if (e.type === 'save') cues.push({ type: 'applause', t: at(e.t) + 0.8, dur: 2.5, level: 0.5 });
-          else if (e.type === 'foul') { cues.push({ type: 'whistle', t: at(e.t) + 0.15, n: 1, short: true }); cues.push({ type: 'thud', t: at(e.t) }); }
-        }
-        for (const k of plan.cards) {
-          if (k.t < s.t0 || k.t > s.t0 + s.dur) continue;
-          cues.push({ type: 'boo', t: at(k.t) - 0.2, level: k.colour === 'red' ? 1 : 0.6 });
-          if (k.colour === 'red') cues.push({ type: 'refTalk', t: at(k.t) - 1.0, dur: 2.6 });
-        }
-      } else if (['halftime', 'fulltime', 'motm'].includes(s.type)) {
-        cues.push({ type: 'crowd', t: s.start, dur: s.dur, values: new Float32Array([0.18, 0.18]) });
-      }
-      if (s.type === 'halftime') cues.push({ type: 'whistle', t: s.start + 0.2, n: 2 });
-      if (s.type === 'fulltime') { cues.push({ type: 'whistle', t: s.start + 0.2, n: 3 }); cues.push({ type: 'applause', t: s.start + 1.2, dur: 6, level: 0.8 }); }
-      if (s.type === 'outro') cues.push({ type: 'boom', t: s.start + 0.2 });
-    }
-    return cues;
-  }
 }
 
 function shade(hex, k) {
   const c = safeColour(hex).slice(1), n = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
   return `rgb(${((n >> 16) & 255) * k | 0},${((n >> 8) & 255) * k | 0},${(n & 255) * k | 0})`;
-}
-
-// ---------------------------------------------------------------- audio synthesis
-
-// Optional real sound files. Drop any of these into assets/audio/ (mp3, wav or ogg) and they
-// replace the generated sound: crowd (a loopable crowd bed), cheer, ooh, boo, applause,
-// whistle, ref-talk.
-export const AUDIO_FILES = ['crowd', 'cheer', 'ooh', 'boo', 'applause', 'whistle', 'ref-talk'];
-
-async function renderAudio(cues, duration, files = {}) {
-  const ctx = new OfflineAudioContext(2, Math.ceil(duration * SR), SR);
-  const samples = {};
-  for (const [name, buf] of Object.entries(files)) {
-    try { samples[name] = await ctx.decodeAudioData(buf.slice(0)); } catch { /* not a usable audio file */ }
-  }
-  const noise = ctx.createBuffer(2, SR * 3, SR);
-  for (let ch = 0; ch < 2; ch++) { const d = noise.getChannelData(ch); let b = 0; for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; d[i] = (w * 0.35 + b * 2.2); } }
-  const master = ctx.createDynamicsCompressor(); master.threshold.value = -16; master.ratio.value = 4; master.knee.value = 8;
-  const out = ctx.createGain(); out.gain.value = 0.9; master.connect(out).connect(ctx.destination);
-  const src = (t, dur) => { const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.start(t, Math.random() * 2); s.stop(t + dur); return s; };
-  const filt = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
-  const gainNode = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
-  const env = (g, t, attack, peak, hold, release) => {
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + attack);
-    g.gain.setValueAtTime(peak, t + attack + hold); g.gain.exponentialRampToValueAtTime(0.0001, t + attack + hold + release);
-  };
-  const playSample = (buf, t, level = 1, dur = null) => {
-    const s = ctx.createBufferSource(), g = gainNode(level); s.buffer = buf; s.connect(g).connect(master);
-    s.start(t); if (dur) { g.gain.setValueAtTime(level, t + Math.max(0, dur - 0.4)); g.gain.linearRampToValueAtTime(0, t + dur); s.stop(t + dur); }
-  };
-
-  // A crowd of human voices singing a vowel: many detuned voices through vowel formant filters.
-  const VOWELS = { oo: [320, 800, 2400], ah: [750, 1150, 2500], oh: [500, 900, 2450], eh: [550, 1750, 2500], ee: [300, 2200, 2900] };
-  function voices(t, dur, vowel, peak, count, lo, hi, glide = 1) {
-    const [f1, f2, f3] = VOWELS[vowel], bus = ctx.createGain(); bus.gain.value = 1;
-    const F = [filt('bandpass', f1, 6), filt('bandpass', f2, 8), filt('bandpass', f3, 10)];
-    const fg = [gainNode(1), gainNode(0.5), gainNode(0.18)];
-    F.forEach((f, i) => bus.connect(f).connect(fg[i]).connect(master));
-    for (let i = 0; i < count; i++) {
-      const o = ctx.createOscillator(), g = ctx.createGain(), st = t + Math.random() * 0.25;
-      o.type = 'sawtooth';
-      const f0 = lo + Math.random() * (hi - lo);
-      o.frequency.setValueAtTime(f0, st); o.frequency.linearRampToValueAtTime(f0 * glide, st + dur * 0.6);
-      o.detune.value = (Math.random() - 0.5) * 40;
-      const p = peak / Math.sqrt(count) * (0.6 + Math.random() * 0.8);
-      env(g, st, 0.25 + Math.random() * 0.2, p, dur * 0.35, dur * 0.55);
-      o.connect(g).connect(bus); o.start(st); o.stop(st + dur + 0.3);
-    }
-  }
-  // Applause: hundreds of individual claps rendered into a buffer.
-  function applause(t, dur, level) {
-    const n = Math.ceil(dur * SR), buf = ctx.createBuffer(2, n, SR);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch), rate = 260;
-      for (let k = 0; k < dur * rate; k++) {
-        const at = Math.floor(Math.random() * n), len = 250 + Math.random() * 450, amp = (0.3 + Math.random() * 0.7) * (1 - at / n * 0.7);
-        for (let i = 0; i < len && at + i < n; i++) d[at + i] += (Math.random() * 2 - 1) * amp * Math.exp(-i / (len * 0.25));
-      }
-    }
-    const s = ctx.createBufferSource(); s.buffer = buf;
-    const f = filt('bandpass', 1700, 0.6), g = gainNode(0.05 * level);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05 * level, t + 0.4);
-    g.gain.setValueAtTime(0.05 * level, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(f).connect(g).connect(master); s.start(t);
-  }
-  // Referee talking into a radio mic: formant "speech" with a syllable rhythm and pitch contour.
-  function refTalk(t, dur) {
-    const o = ctx.createOscillator(); o.type = 'sawtooth';
-    const F = [filt('bandpass', 500, 7), filt('bandpass', 1500, 9), filt('bandpass', 2500, 10)];
-    const amp = ctx.createGain(); amp.gain.value = 0;
-    const mix = gainNode(1), radio1 = filt('highpass', 380, 0.7), radio2 = filt('lowpass', 3200, 0.7);
-    const shaper = ctx.createWaveShaper(); const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(2.2 * x); } shaper.curve = curve;
-    const outG = gainNode(0.9);
-    o.connect(amp); F.forEach((f, i) => amp.connect(f).connect(gainNode([1, 0.55, 0.25][i])).connect(mix));
-    mix.connect(radio1).connect(radio2).connect(shaper).connect(outG).connect(master);
-    const vowels = Object.values(VOWELS);
-    let tt = t, f0 = 125;
-    while (tt < t + dur - 0.15) {
-      const syl = 0.09 + Math.random() * 0.13, v = vowels[(Math.random() * vowels.length) | 0];
-      f0 = clamp(f0 + (Math.random() - 0.5) * 30, 95, 170);
-      o.frequency.setValueAtTime(f0, tt); o.frequency.linearRampToValueAtTime(f0 * (0.9 + Math.random() * 0.2), tt + syl);
-      F.forEach((f, i) => f.frequency.setTargetAtTime(v[i] * (0.9 + Math.random() * 0.2), tt, 0.02));
-      amp.gain.setTargetAtTime(0.5, tt, 0.015); amp.gain.setTargetAtTime(0.0, tt + syl * 0.8, 0.02);
-      tt += syl + (Math.random() < 0.18 ? 0.18 + Math.random() * 0.2 : 0.03);   // occasional pause between words
-    }
-    o.start(t); o.stop(t + dur + 0.2);
-    // Radio click at the start and end
-    for (const ct of [t - 0.05, t + dur]) { const s = src(ct, 0.03), g = gainNode(0.3); s.connect(filt('highpass', 2000, 0.7)).connect(g).connect(master); }
-  }
-  function whistle(t, n, short) {
-    for (let i = 0; i < n; i++) {
-      const st = t + i * 0.45, len = short ? 0.35 : i === n - 1 ? 0.9 : 0.28;
-      const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = gainNode(90), g = ctx.createGain();
-      o.frequency.value = 2900; lfo.frequency.value = 38; lfo.connect(lg).connect(o.frequency);
-      g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.18, st + 0.02); g.gain.setValueAtTime(0.18, st + len - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, st + len);
-      o.connect(g).connect(master); o.start(st); lfo.start(st); o.stop(st + len); lfo.stop(st + len);
-    }
-  }
-
-  for (const c of cues) {
-    const t = Math.max(0, c.t);
-    const S = name => samples[name];
-    if (c.type === 'crowd') {
-      const curve = Array.from(c.values, v => v * 0.2);
-      if (S('crowd')) {
-        const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = S('crowd'); s.loop = true;
-        g.gain.setValueCurveAtTime(Float32Array.from(curve, v => v * 3), t, c.dur); s.connect(g).connect(master); s.start(t, Math.random() * Math.max(0, S('crowd').duration - 1)); s.stop(t + c.dur);
-      } else {
-        // Two layers of crowd murmur with a slow swell, following the danger curve.
-        for (const [f, q, lvl] of [[420, 0.6, 1], [1300, 0.9, 0.45]]) {
-          const s = src(t, c.dur), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = gainNode(0.25);
-          lfo.frequency.value = 0.15 + Math.random() * 0.2; lfo.connect(lg).connect(g.gain);
-          g.gain.setValueCurveAtTime(Float32Array.from(curve, v => v * lvl), t, c.dur);
-          s.connect(filt('bandpass', f, q)).connect(g).connect(master); lfo.start(t); lfo.stop(t + c.dur);
-        }
-      }
-    } else if (c.type === 'cheer') {
-      if (S('cheer')) playSample(S('cheer'), t, 1, 6.5);
-      else {
-        voices(t, 5.5, 'ah', 1.1, 26, 170, 420, 1.12);
-        voices(t + 0.1, 5, 'oh', 0.7, 18, 100, 190, 1.05);
-        const s = src(t, 5.5), g = ctx.createGain(); env(g, t, 0.3, 0.55, 1.5, 3.5); s.connect(filt('bandpass', 900, 0.5)).connect(g).connect(master);
-      }
-    } else if (c.type === 'ooh') {
-      if (S('ooh')) playSample(S('ooh'), t, c.level, 3);
-      else voices(t, 2.2, 'oo', 0.75 * c.level, 22, 130, 300, 0.85);
-    } else if (c.type === 'boo') {
-      if (S('boo')) playSample(S('boo'), t, c.level, 3.5);
-      else voices(t, 3.2, 'oo', 0.8 * c.level, 24, 85, 150, 0.97);
-    } else if (c.type === 'applause') {
-      if (S('applause')) playSample(S('applause'), t, c.level, c.dur);
-      else applause(t, c.dur, c.level);
-    } else if (c.type === 'refTalk') {
-      if (S('ref-talk')) playSample(S('ref-talk'), t, 1, c.dur + 1);
-      else refTalk(t, c.dur);
-    } else if (c.type === 'whistle') {
-      if (S('whistle')) { for (let i = 0; i < c.n; i++) playSample(S('whistle'), t + i * 0.45, 0.8); }
-      else whistle(t, c.n, c.short);
-    } else if (c.type === 'thud') {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.25);
-      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-      o.connect(g).connect(master); o.start(t); o.stop(t + 0.32);
-    } else if (c.type === 'whoosh') {
-      const s = src(t, 0.7), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(4000, t + 0.55);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-      s.connect(f).connect(g).connect(master);
-    } else if (c.type === 'boom') {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(38, t + 1.2);
-      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
-      o.connect(g).connect(master); o.start(t); o.stop(t + 1.7);
-    } else if (c.type === 'riser') {
-      const s = src(t, 1.4), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'highpass'; f.frequency.setValueAtTime(200, t); f.frequency.exponentialRampToValueAtTime(6000, t + 1.3);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
-      s.connect(f).connect(g).connect(master);
-    }
-  }
-  return ctx.startRendering();
 }
 
 // ---------------------------------------------------------------- thumbnail and text
@@ -1235,16 +1032,7 @@ export async function loadAssets(teams) {
   }));
   const [league, title] = await Promise.all([loadImg('assets/league/logo.png'), loadImg('assets/league/title.jpg')]);
   await Promise.all(['700', '800', '900'].map(w => document.fonts.load(`${w} 40px Inter`).catch(() => {})));
-  // Optional real sound files; any that are missing fall back to generated sound.
-  const audio = {};
-  let list = null;
-  try { const r = await fetch('assets/audio/sounds.json', { cache: 'no-store' }); if (r.ok) list = await r.json(); } catch { /* none */ }
-  await Promise.all(AUDIO_FILES.map(async name => {
-    const file = list?.[name];
-    if (!file) return;
-    try { const r = await fetch(`assets/audio/${file}`); if (r.ok) audio[name] = await r.arrayBuffer(); } catch { /* skip */ }
-  }));
-  return { logos, logosAlt, league, title, audio };
+  return { logos, logosAlt, league, title };
 }
 
 // Renders and encodes the video. `fileHandle` (optional) streams straight to disk.
@@ -1254,22 +1042,12 @@ export async function exportVideo(renderer, { fileHandle, onProgress, onPreview,
   if (!(await VideoEncoder.isConfigSupported(vcfg)).supported) vcfg = { ...vcfg, codec: 'avc1.4d0028' };
   if (!(await VideoEncoder.isConfigSupported(vcfg)).supported) throw new Error("This browser can't encode H.264 video. Use Chrome or Edge.");
 
-  onProgress?.('Preparing audio…', 0);
-  const audio = await renderAudio(renderer.audioCues(), renderer.duration, renderer.A.audio || {});
-  let acfg = null, audioCodec = null;
-  if (typeof AudioEncoder !== 'undefined') {
-    for (const [codec, mux] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
-      const cfg = { codec, sampleRate: SR, numberOfChannels: 2, bitrate: 160000 };
-      if ((await AudioEncoder.isConfigSupported(cfg)).supported) { acfg = cfg; audioCodec = mux; break; }
-    }
-  }
-
+  // Video only: the MP4 has no audio track.
   let writable = null;
   const target = fileHandle ? new FileSystemWritableFileStreamTarget(writable = await fileHandle.createWritable()) : new ArrayBufferTarget();
   const muxer = new Muxer({
     target, fastStart: fileHandle ? false : 'in-memory',
     video: { codec: 'avc', width: W, height: H, frameRate: FPS },
-    ...(acfg ? { audio: { codec: audioCodec, numberOfChannels: 2, sampleRate: SR } } : {}),
   });
   let encErr = null;
   const venc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => { encErr = e; } });
@@ -1286,20 +1064,6 @@ export async function exportVideo(renderer, { fileHandle, onProgress, onPreview,
     if (i % 15 === 0) { onProgress?.('Rendering video…', i / total); onPreview?.(cv); await new Promise(r => setTimeout(r, 0)); }
   }
   await venc.flush(); venc.close();
-
-  if (acfg) {
-    onProgress?.('Encoding audio…', 1);
-    const aenc = new AudioEncoder({ output: (ch, meta) => muxer.addAudioChunk(ch, meta), error: e => { encErr = e; } });
-    aenc.configure(acfg);
-    const L = audio.getChannelData(0), R = audio.getChannelData(1), step = 1024;
-    for (let off = 0; off < audio.length; off += step) {
-      const n = Math.min(step, audio.length - off), buf = new Float32Array(n * 2);
-      buf.set(L.subarray(off, off + n), 0); buf.set(R.subarray(off, off + n), n);
-      aenc.encode(new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round(off * 1e6 / SR), data: buf }));
-      if (aenc.encodeQueueSize > 50) await new Promise(r => setTimeout(r, 1));
-    }
-    await aenc.flush(); aenc.close();
-  }
   if (encErr) throw encErr;
   muxer.finalize();
   if (writable) { await writable.close(); return null; }
