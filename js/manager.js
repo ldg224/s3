@@ -131,7 +131,7 @@ async function save(what) {
 
 function overviewPane(pane) {
   const code = me.team, now = new Date(), name = c => T[c]?.name || c;
-  const mine = S.fixtures.filter(f => f.home === code || f.away === code);
+  const mine = S.fixtures.filter(f => (f.home === code || f.away === code) && f.home && f.away);   // skip finals with a team still TBC
   const next = mine.filter(f => ['upcoming', 'live'].includes(status(f, S, now))).sort((a, b) => kickoff(a) - kickoff(b))[0];
   const last = mine.filter(f => status(f, S, now) === 'ft').sort((a, b) => kickoff(b) - kickoff(a))[0];
   const row = ladder(S, finished(S, now)).find(r => r.team.code === code);
