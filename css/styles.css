@@ -135,9 +135,13 @@ main { display: flex; flex-direction: column; gap: var(--gap); }
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background:
-    radial-gradient(120% 140% at 100% 0%, rgba(143, 224, 26, 0.18), transparent 60%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.5)),
+    url('../assets/league/title.jpg') center / cover no-repeat,
     var(--surface);
 }
+
+.league-logo { width: clamp(56px, 10vw, 72px); height: auto; flex: none; }
+.header-text { flex: 1; min-width: 0; }
 
 .site-header h1 {
   font-size: clamp(1.9rem, 6vw, 2.8rem);
@@ -150,6 +154,8 @@ main { display: flex; flex-direction: column; gap: var(--gap); }
   padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
   color: var(--text);
   text-decoration: none;
   font-size: 0.875rem;
