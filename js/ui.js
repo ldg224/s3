@@ -7,12 +7,12 @@ export const $ = s => document.querySelector(s);
 export const safeColour = c => (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c || '') ? c : '#475569');
 export const logoPath = (code, alt = false) => `assets/teams/${String(code).toLowerCase()}${alt ? '-alt' : ''}.png`;
 
-// Team logo with an initials fallback if the image is missing.
+// Team logo on a transparent background. The coloured initials badge only appears if the image is missing.
 export function logo(team, size = 38) {
   const code = team?.code || '?';
-  return `<span style="--s:${size}px;--c:${esc(safeColour(team?.colour))};position:relative;display:inline-grid;width:${size}px;height:${size}px;flex:none">`
-    + `<span class="logo-fallback" style="width:100%;height:100%">${esc(code.slice(0, 3))}</span>`
-    + `<img class="logo" src="${esc(logoPath(code))}" alt="" style="position:absolute;inset:0;width:100%;height:100%" onerror="this.remove()"></span>`;
+  return `<span style="--s:${size}px;--c:${esc(safeColour(team?.colour))};position:relative;display:inline-grid;place-items:center;width:${size}px;height:${size}px;flex:none">`
+    + `<img class="logo" src="${esc(logoPath(code))}" alt="" style="width:100%;height:100%" onerror="this.nextElementSibling.hidden=false;this.remove()">`
+    + `<span class="logo-fallback" style="width:100%;height:100%" hidden>${esc(code.slice(0, 3))}</span></span>`;
 }
 
 const dfmt = new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });

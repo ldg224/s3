@@ -7,7 +7,6 @@
 .scoreboard {
   --h: #444; --a: #444; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 12px;
   padding: 22px 14px; box-shadow: inset 4px 0 0 var(--h), inset -4px 0 0 var(--a);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--h) 14%, var(--surface)) 0%, var(--surface) 45%, var(--surface) 55%, color-mix(in srgb, var(--a) 14%, var(--surface)) 100%);
 }
 .sb-team { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; text-decoration: none; min-width: 0; }
 .sb-team > span:first-child { --s: 56px !important; width: 56px !important; height: 56px !important; }
