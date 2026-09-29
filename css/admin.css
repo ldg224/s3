@@ -80,3 +80,11 @@
 }
 .ed-wait { color: var(--upcoming); }
 .edit-toggle .state { font-size: .8rem; }
+
+/* Highlights video export */
+.ed-box.wide { width: min(560px, 100%); }
+.vid-preview { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; background: #06150b; display: block; }
+.vid-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.vid-bar span { display: block; height: 100%; width: 0; background: var(--brand-grad); transition: width .3s; }
+.vid-status { font-size: .84rem; }
+.vid-folder { justify-content: space-between; }

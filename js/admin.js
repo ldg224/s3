@@ -6,7 +6,7 @@
 // in that browser. The PIN unlocks it; without the token nobody can change the site.
 
 import { REPO, BRANCH, SEASON_FILE, MATCH_DIR } from './config.js';
-import { loadSeason, setSeason, summariseMatch, parseMatchBlob, localFiles, kickoff } from './data.js';
+import { loadSeason, setSeason, summariseMatch, parseMatchBlob, localFiles, kickoff, loadMatchFile } from './data.js';
 import { esc, safeColour } from './ui.js';
 
 const STORE = 'hcl-s3-admin';
@@ -238,6 +238,7 @@ function fixturesTab(body) {
     <td><select class="ed-select" data-k="away" aria-label="Away">${teamOpts(f.away)}</select></td>
     <td class="fx-result ${f.result ? '' : 'none'}">${f.result ? `${f.result.home}-${f.result.away}${uploads.has(f.file) ? ' •' : ''}` : 'No file'}</td>
     <td><div class="ed-row" style="flex-wrap:nowrap">
+      ${f.result ? '<button class="ed-btn small primary" data-act="video" title="Export a highlights video">🎬 Video</button>' : ''}
       <button class="ed-btn small" data-act="upload">${f.result ? 'Replace' : 'Upload'}</button>
       ${f.result ? '<button class="ed-btn small danger" data-act="clear" title="Remove the match file">Remove file</button>' : ''}
       <button class="ed-btn small danger" data-act="delete" aria-label="Delete fixture">✕</button></div></td></tr>`).join('');
@@ -272,12 +273,123 @@ function fixturesTab(body) {
       uploads.delete(f.file); f.result = null; delete f.file; refresh();
     }
     if (b.dataset.act === 'upload') { tab = 'upload'; uploadTarget = f.id; refresh(); }
+    if (b.dataset.act === 'video') openVideoExport(f);
   });
   body.querySelector('#nf-add').onclick = () => {
     const week = +body.querySelector('#nf-week').value || 1, h = body.querySelector('#nf-home').value, a = body.querySelector('#nf-away').value;
     if (h === a) return alert('Pick two different teams.');
     draft.fixtures.push({ id: newId(week, h, a), week, date: body.querySelector('#nf-date').value, time: body.querySelector('#nf-time').value, home: h, away: a, result: null });
     refresh();
+  };
+}
+
+// ---------- Highlights video ----------
+// Renders a ~3 minute highlights MP4, thumbnail and YouTube text for a fixture, in the browser,
+// and saves them into a folder the user picks once (remembered per device). Saving files here
+// doesn't change the league data, so nothing is published.
+
+const FS_DB = 'hcl-s3-video';
+function fsStore(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(FS_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction('kv', mode), r = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => resolve(r?.result);
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+const getFolder = () => fsStore('readonly', s => s.get('folder')).catch(() => null);
+const setFolder = h => fsStore('readwrite', s => s.put(h, 'folder')).catch(() => {});
+const canPickFolder = () => typeof window.showDirectoryPicker === 'function';
+
+function saveDownload(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+async function openVideoExport(f) {
+  const hl = await import('./highlights.js');
+  const T = Object.fromEntries(draft.teams.map(t => [t.code, t]));
+  const label = `Week ${f.week} · ${T[f.home]?.name || f.home} ${f.result.home}-${f.result.away} ${T[f.away]?.name || f.away}`;
+  const m = modal(`<h2>🎬 Highlights video</h2><p>${esc(label)}</p>
+    <canvas class="vid-preview" width="480" height="270" aria-label="Preview"></canvas>
+    <div class="vid-bar"><span></span></div>
+    <p class="vid-status">About 3 minutes of highlights in 1080p, with a thumbnail and YouTube title and description.</p>
+    <div class="ed-row vid-folder"></div>
+    <div class="ed-err"></div>
+    <div class="ed-row"><button class="ed-btn primary" data-go>Export video</button><button class="ed-btn" data-close>Close</button></div>`);
+  m.querySelector('.ed-box').classList.add('wide');
+  const status = m.querySelector('.vid-status'), bar = m.querySelector('.vid-bar span'), err = m.querySelector('.ed-err');
+  const go = m.querySelector('[data-go]'), close = m.querySelector('[data-close]'), pv = m.querySelector('.vid-preview').getContext('2d');
+  let folder = await getFolder(), cancelled = false, running = false;
+  // Don't let a stray click on the backdrop hide an export that's still running.
+  m.addEventListener('click', e => { if (running && e.target === m) e.stopImmediatePropagation(); }, true);
+
+  const showFolder = () => {
+    const box = m.querySelector('.vid-folder');
+    if (!hl.supported()) { box.innerHTML = '<span class="ed-err">This browser can\'t make videos. Use Chrome or Edge on a computer.</span>'; go.disabled = true; return; }
+    box.innerHTML = canPickFolder()
+      ? `<span class="ed-hint">Save to: <b>${folder ? esc(folder.name) : 'no folder chosen yet'}</b></span><button class="ed-btn small" data-pick>${folder ? 'Change folder' : 'Choose folder'}</button>`
+      : '<span class="ed-hint">The files will download to your Downloads folder.</span>';
+    const pick = box.querySelector('[data-pick]');
+    if (pick) pick.onclick = async () => {
+      try { folder = await window.showDirectoryPicker({ id: 'hcl-highlights', mode: 'readwrite', startIn: 'videos' }); await setFolder(folder); showFolder(); }
+      catch { /* picker cancelled */ }
+    };
+  };
+  showFolder();
+  close.onclick = () => { if (running) { cancelled = true; close.textContent = 'Cancelling…'; } else m.remove(); };
+
+  go.onclick = async () => {
+    err.textContent = '';
+    try {
+      // Folder first (needs this click as the user gesture).
+      if (canPickFolder()) {
+        if (!folder) { folder = await window.showDirectoryPicker({ id: 'hcl-highlights', mode: 'readwrite', startIn: 'videos' }); await setFolder(folder); showFolder(); }
+        if ((await folder.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await folder.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('Permission to save into that folder was refused.');
+      }
+      running = true; go.disabled = true; close.textContent = 'Cancel';
+      status.textContent = 'Loading the match…';
+      const data = await loadMatchFile(f.file);
+      const r = new hl.HighlightsRenderer(data, { season: draft, fixture: f, assets: await hl.loadAssets(draft.teams) });
+      const safe = s => String(s).replace(/[\\/:*?"<>|]/g, '-');
+      const base = safe(`Week ${f.week} - ${f.home} ${f.result.home}-${f.result.away} ${f.away} Highlights`);
+      const t0 = performance.now();
+      const fileHandle = folder ? await folder.getFileHandle(`${base}.mp4`, { create: true }) : null;
+      const mp4 = await hl.exportVideo(r, {
+        fileHandle,
+        isCancelled: () => cancelled,
+        onProgress: (phase, frac) => {
+          bar.style.width = `${Math.round(frac * 100)}%`;
+          const secs = (performance.now() - t0) / 1000, left = frac > 0.03 ? secs / frac - secs : null;
+          status.textContent = `${phase} ${Math.round(frac * 100)}%${left ? ` · about ${Math.max(1, Math.round(left / 60))} min left` : ''}`;
+        },
+        onPreview: cv => pv.drawImage(cv, 0, 0, 480, 270),
+      });
+      status.textContent = 'Making the thumbnail…';
+      const thumb = await hl.makeThumbnail(r), text = hl.youtubeText(r).text;
+      const files = [[`${base} - Thumbnail.png`, thumb], [`${base} - YouTube.txt`, new Blob([text], { type: 'text/plain' })]];
+      if (folder) {
+        for (const [name, blob] of files) { const h = await folder.getFileHandle(name, { create: true }), w = await h.createWritable(); await w.write(blob); await w.close(); }
+      } else {
+        saveDownload(mp4, `${base}.mp4`);
+        for (const [name, blob] of files) saveDownload(blob, name);
+      }
+      bar.style.width = '100%';
+      const mins = Math.floor(r.duration / 60), secs = Math.round(r.duration % 60);
+      status.innerHTML = `<span class="ed-ok">Done: ${mins}:${String(secs).padStart(2, '0')} video saved${folder ? ` to <b>${esc(folder.name)}</b>` : ''}, with the thumbnail and YouTube text.</span>`;
+      const img = new Image(); img.onload = () => pv.drawImage(img, 0, 0, 480, 270); img.src = URL.createObjectURL(thumb);
+    } catch (e) {
+      err.textContent = e.message === 'Cancelled' ? 'Export cancelled.' : (e.name === 'AbortError' ? 'No folder chosen.' : `Couldn't make the video: ${e.message}`);
+      bar.style.width = '0';
+    } finally {
+      running = false; go.disabled = false; go.textContent = 'Export again'; close.textContent = 'Close';
+    }
   };
 }
 
