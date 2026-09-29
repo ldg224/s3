@@ -1,22 +1,27 @@
 // Manager Hub: each team's manager signs in with the email and PIN the league admin set,
-// then manages their lineup, formation, tactics and set pieces, checks their players'
-// season ratings and answers questions from the media. Saves go through the manager relay.
+// then reads league news (the first tab), manages their lineup, formation, tactics and set
+// pieces, checks their players' season ratings and answers questions from the media.
+// Saves go through the manager relay. League news lives in js/manager-news.js.
 
 import { loadSeason, teamMap, playerTotals, kickoff, status, ladder, finished, resultFor } from './data.js';
 import { $, esc, logo, safeColour, onColour, countdown, dayLabel, fmtTime, matchUrl } from './ui.js';
-import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, findManagerTeam, relaySave, pressQuestions } from './managers.js';
+import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, loadTeamFiles, findManagerTeam, relaySave, pressQuestions } from './managers.js';
+import { newsPane, bannerHtml, badgeCount, tickDue } from './manager-news.js';
 
 const SESSION = 'hcl-manager';
 let S, T, me = null;          // me = { email, pin, team }
 let file = null, saved = '';  // working manager file, and its last-saved JSON
-let tab = 'overview', picking = null, message = '';
+let tab = 'news', picking = null, message = '';
+let teamFiles = {};           // every team's file, for poll totals
+let wantPost = null;          // a post to open after signing in (manager.html#news/<id>)
 const REMEMBER = 'hcl-manager-email', STAY = 'hcl-manager-stay';
 
 const shirt = p => String(p.id).slice(-2);
 const surname = p => p.name.split(' ').slice(-1)[0];
 const ratingColour = r => (r >= 7.5 ? '#34d399' : r >= 6.5 ? '#fbbf24' : r > 0 ? '#f87171' : '#4b5563');
-const dirty = () => file && JSON.stringify({ ...file, updated: null }) !== saved;
-const snapshot = f => JSON.stringify({ ...f, updated: null });
+// News answers are saved straight away through their own relay action, so they never count as unsaved.
+const snapshot = f => JSON.stringify({ ...f, updated: null, news: null });
+const dirty = () => file && snapshot(file) !== saved;
 
 function stats() {
   const tot = playerTotals(S);
@@ -32,7 +37,8 @@ function renderLogin(err = '') {
   $('#mount').innerHTML = `<section class="card mg-login">
     <div class="mg-crests">${S.teams.map(t => logo(t, 30)).join('')}</div>
     <h1>Manager login</h1>
-    <p>Sign in to pick your lineup, set your tactics and talk to the media.</p>
+    <p>Sign in to read league news, pick your lineup, set your tactics and talk to the media.</p>
+    ${wantPost ? '<p class="mg-wanted">📣 Sign in to see the league office post you opened.</p>' : ''}
     ${configured ? '' : '<p class="err">Manager logins haven’t been set up yet. Ask the league admin.</p>'}
     <form id="login" class="stack" style="gap:12px" autocomplete="on">
       <label class="field">Email<input class="input" type="email" name="email" autocomplete="email" required value="${esc(remembered())}"></label>
@@ -68,7 +74,48 @@ async function openTeam() {
   const newest = local && (!live || (local.updated || '') > (live.updated || '')) ? local : live;
   file = normaliseTeamFile(S, me.team, newest || {});
   saved = snapshot(file);
+  teamFiles = {};
+  if (wantPost) { openPost(wantPost, false, true); wantPost = null; } else render();
+  // Other teams' files, for poll totals. The News tab redraws once they arrive (unless a form is in use).
+  const code = me.team;
+  loadTeamFiles(S).then(all => {
+    if (!me || me.team !== code) return;
+    delete all[code];   // our own file is `file`, which is fresher
+    teamFiles = all;
+    if (tab === 'news' && !document.querySelector('#pane form.nw-form :focus')) paneOnly();
+  });
+}
+
+// ---------- League news ----------
+
+const newsCtx = () => ({
+  season: S, me, file, teamFiles,
+  // A relay 'news' reply: take its news block, keep any unsaved lineup or tactics edits.
+  setNews(news, raw) {
+    file.news = news;
+    try { sessionStorage.setItem(`${SESSION}-file-${me.team}`, JSON.stringify(raw)); } catch { /* ignore */ }
+  },
+  openPost,
+});
+
+// Show the News tab scrolled to a post. flash = highlight it (deep links and banner taps).
+function openPost(id, stay = false, flash = !stay) {
+  const y = window.scrollY;
+  tab = 'news'; picking = null;
   render();
+  const el = document.getElementById(`news-${id}`);
+  if (!el) {
+    if (!stay) $('#pane').insertAdjacentHTML('afterbegin', '<section class="card"><p class="empty">That post isn’t available for your team (it may have been removed).</p></section>');
+    return;
+  }
+  if (stay) { window.scrollTo({ top: y }); el.scrollIntoView({ block: 'nearest' }); }
+  else el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (flash) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+}
+
+// Redraw just the current tab's content (keeps the header, banner and tabs).
+function paneOnly() {
+  if (tab === 'news') newsPane($('#pane'), newsCtx());
 }
 
 function signOut() {
@@ -82,19 +129,23 @@ function signOut() {
 
 function render() {
   const t = T[me.team];
-  const tabs = [['overview', 'Overview'], ['lineup', 'Lineup'], ['tactics', 'Tactics'], ['squad', 'Squad'], ['scout', 'Scouting'], ['reports', 'Match reports'], ['media', 'Media']];
+  const tabs = [['news', 'News'], ['overview', 'Overview'], ['lineup', 'Lineup'], ['tactics', 'Tactics'], ['squad', 'Squad'], ['scout', 'Scouting'], ['reports', 'Match reports'], ['media', 'Media']];
   const open = pressQuestions(S, me.team).filter(q => !file.press.some(p => p.id === q.id)).length;
+  const ctx = newsCtx(), unread = badgeCount(ctx);
+  const count = k => (k === 'media' && open ? ` (${open})` : k === 'news' && unread && tab !== 'news' ? ` <span class="mg-badge">${unread}</span>` : '');
   $('#mount').innerHTML = `<div class="stack">
     <section class="card mg-head">${logo(t, 60)}<div class="grow"><h1>${esc(t.name)}</h1><p>${esc(t.manager || 'Manager')} · signed in as ${esc(me.email)}</p></div>
       <button class="btn small" id="signout">Sign out</button></section>
-    <div class="mg-tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}${k === 'media' && open ? ` (${open})` : ''}</button>`).join('')}</div>
+    <div id="nwbanner">${bannerHtml(ctx)}</div>
+    <div class="mg-tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}${count(k)}</button>`).join('')}</div>
     <div id="pane"></div>
     <div class="savebar" id="savebar" hidden><span id="save-msg"></span><button class="btn primary" id="save">Save changes</button></div>
   </div>`;
   $('#signout').onclick = signOut;
+  $('#nwbanner').onclick = e => { const b = e.target.closest('[data-open-post]'); if (b) openPost(b.dataset.openPost); };
   document.querySelector('.mg-tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; picking = null; render(); } };
   $('#save').onclick = () => save('updated their team');
-  ({ overview: overviewPane, lineup: lineupPane, tactics: tacticsPane, squad: squadPane, scout: p => extraPane(p, 'scoutPane'), reports: p => extraPane(p, 'reportsPane'), media: mediaPane })[tab]($('#pane'));
+  ({ news: p => newsPane(p, ctx), overview: overviewPane, lineup: lineupPane, tactics: tacticsPane, squad: squadPane, scout: p => extraPane(p, 'scoutPane'), reports: p => extraPane(p, 'reportsPane'), media: mediaPane })[tab]($('#pane'));
   updateSaveBar();
 }
 
@@ -357,9 +408,15 @@ async function init() {
   T = teamMap(S);
   try { me = JSON.parse(sessionStorage.getItem(SESSION) || localStorage.getItem(STAY) || 'null'); } catch { me = null; }
   if (me && !T[me.team]) me = null;
+  const linked = () => { const m = location.hash.match(/^#news\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
+  wantPost = linked();
   if (me) await openTeam(); else renderLogin();
+  window.addEventListener('hashchange', () => { const id = linked(); if (!id) return; if (me && file) openPost(id); else { wantPost = id; renderLogin(); } });
   window.addEventListener('beforeunload', e => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
-  setInterval(() => document.querySelectorAll('.countdown[data-kickoff]').forEach(el => { el.textContent = countdown(new Date(+el.dataset.kickoff)); }), 15000);
+  setInterval(() => {
+    document.querySelectorAll('.countdown[data-kickoff]').forEach(el => { el.textContent = countdown(new Date(+el.dataset.kickoff)); });
+    tickDue();
+  }, 15000);
 }
 
 init();

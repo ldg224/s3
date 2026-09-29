@@ -75,7 +75,7 @@ button, input, select { font: inherit; color: inherit; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
 .brand img { width: 36px; height: 36px; object-fit: contain; flex: none; }
 .brand b { font-weight: 800; font-size: 1rem; letter-spacing: -.2px; white-space: nowrap; }
-.brand small { display: block; font-size: .7rem; font-weight: 700; color: var(--muted); line-height: 1.1; }
+.brand small { display: block; font-size: .7rem; font-weight: 700; color: var(--muted); line-height: 1.1; white-space: nowrap; }
 .brand .long { display: none; }
 .nav { display: flex; gap: 4px; }
 .nav a {
@@ -84,7 +84,10 @@ button, input, select { font: inherit; color: inherit; }
 }
 .nav a:hover { color: var(--text); background: var(--surface-2); }
 .nav a[aria-current="page"] { background: var(--brand-grad); color: #0f1115; }
-@media (min-width: 560px) {
+/* Five nav links: the full league name and roomy links only once there's space for them. */
+@media (min-width: 480px) and (max-width: 559px) { .nav a { padding: 8px 7px; font-size: .8rem; } }
+@media (min-width: 560px) and (max-width: 799px) { .nav a { padding: 8px 10px; } }
+@media (min-width: 800px) {
   .brand .short { display: none; }
   .brand .long { display: inline; }
   .nav a { padding: 8px 16px; }
@@ -104,8 +107,11 @@ button, input, select { font: inherit; color: inherit; }
 .mgr-btn svg { width: 17px; height: 17px; }
 .mgr-btn:hover { background: rgba(143,255,6,.16); }
 .mgr-btn[aria-current="page"] { background: var(--brand-grad); color: #0f1115; border-color: transparent; }
-@media (max-width: 719px) { .mgr-btn span { display: none; } .mgr-btn { padding: 0; width: 36px; justify-content: center; } }
-@media (max-width: 419px) { .brand b { display: none; } }
+@media (max-width: 799px) { .mgr-btn span { display: none; } .mgr-btn { padding: 0; width: 36px; justify-content: center; } }
+@media (max-width: 479px) { .brand b { display: none; } }
+/* Five nav links + the Managers button on small phones. Below 375px the logo gives way (Matches is the home page). */
+@media (max-width: 419px) { .topbar-inner { gap: 8px; } .nav a { padding: 8px 6px; font-size: .78rem; } }
+@media (max-width: 374px) { .brand { display: none; } .nav a { padding: 8px 5px; } }
 
 /* ---------- Home hero ---------- */
 .hero {

@@ -1,8 +1,11 @@
 import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, liveSimTime, clockAt } from './data.js';
 import { $, esc, logo, parseStamp, fmtDate, fmtTime, dayLabel, countdown, matchUrl } from './ui.js';
 import { STAGE_NAMES, sideTeam } from './league.js';
+import { publicPosts, renderPost, publicTalliesShown } from './news.js';
+import { loadTeamFiles } from './managers.js';
 
-let S, T;
+let S, T, teamFiles = {};
+const LATEST = 3;
 
 const NOTE = { awaiting: 'Result pending', tba: 'TBC', postponed: 'Postponed' };
 
@@ -74,6 +77,17 @@ function renderWeeks(selected) {
   $('#week-list').innerHTML = dayGroups(list) || `<p class="empty">${S.fixtures.length ? 'No matches this week.' : 'No fixtures yet. They’ll appear here as soon as they’re scheduled.'}</p>`;
 }
 
+// The latest league news, near the top of the page. Long posts are clipped with a link to news.html.
+function renderNews() {
+  const posts = publicPosts(S).slice(0, LATEST), box = $('#news-latest');
+  box.hidden = !posts.length;
+  if (!posts.length) return;
+  $('#news-latest-list').innerHTML = posts.map(p => `<div class="nw-clip">${renderPost(p, S, { mode: 'public', teamFiles })}
+    <a class="nw-readmore" href="news.html#news-${encodeURIComponent(p.id)}">Read more ›</a></div>`).join('');
+  // Only show "Read more" on posts that were actually cut short.
+  requestAnimationFrame(() => document.querySelectorAll('#news-latest-list .nw-clip').forEach(c => c.classList.toggle('clipped', c.scrollHeight > c.clientHeight + 4)));
+}
+
 function renderAll() {
   T = teamMap(S);
   $('#season-label').textContent = `Season ${S.season}`;
@@ -82,6 +96,7 @@ function renderAll() {
   n.hidden = !S.notice;
   n.textContent = S.notice || '';
   renderHero();
+  renderNews();
   const current = document.querySelector('#week-tabs [aria-selected="true"]')?.dataset.week;
   renderWeeks(current ?? activeWeek(S));
   $('#updated').textContent = S.updated ? `· Updated ${parseStamp(S.updated).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
@@ -91,6 +106,7 @@ async function init() {
   try {
     S = await loadSeason();
     renderAll();
+    if (publicTalliesShown(publicPosts(S).slice(0, LATEST))) loadTeamFiles(S).then(f => { teamFiles = f; renderNews(); });
   } catch (e) {
     $('#week-list').innerHTML = `<p class="empty">Couldn't load the league data. ${esc(e.message)}</p>`;
     $('#hero-status').textContent = '';

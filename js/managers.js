@@ -88,6 +88,9 @@ export function normaliseTeamFile(season, code, file = {}) {
     captain: pick(file.captain), penalties: pick(file.penalties), freekicks: pick(file.freekicks), corners: pick(file.corners),
     message: typeof file.message === 'string' ? file.message : '',
     press: Array.isArray(file.press) ? file.press : [],
+    // League news: read receipts, poll votes and form answers (docs/NEWS.md). Only the relay's
+    // 'news' action changes it; a 'save' keeps whatever is stored, so pass it through untouched.
+    news: file.news && typeof file.news === 'object' && !Array.isArray(file.news) ? file.news : {},
   };
 }
 
@@ -96,6 +99,12 @@ export async function loadTeamFile(code) {
     const r = await fetch(`data/teams/${code.toLowerCase()}.json?t=${Date.now()}`, { cache: 'no-store' });
     return r.ok ? await r.json() : null;
   } catch { return null; }
+}
+
+// Every team's file that exists, by code (e.g. for league news poll totals).
+export async function loadTeamFiles(season) {
+  const list = await Promise.all(season.teams.map(async t => [t.code, await loadTeamFile(t.code)]));
+  return Object.fromEntries(list.filter(([, f]) => f));
 }
 
 // ---------- Logins ----------
@@ -121,7 +130,7 @@ export async function findManagerTeam(season, email, pin) {
   return null;
 }
 
-// Send a manager save to the relay. Resolves with the relay's JSON reply.
+// Send a request to the relay ('save', 'news' or 'upload'). Resolves with the relay's JSON reply.
 export async function relaySave(season, payload) {
   if (!season.manager_relay) throw new Error('Saving isn’t switched on yet. Ask the league admin to finish the manager setup.');
   const res = await fetch(season.manager_relay, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain;charset=utf-8' } });

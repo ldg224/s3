@@ -150,3 +150,24 @@ button.prow:hover { border-color: rgba(255,255,255,.18); }
 .todo-row .arrow { margin-left: auto; color: var(--muted); font-size: 1.1rem; }
 .res-dot { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: .72rem; font-weight: 900; flex: none; }
 .res-dot.W { background: var(--final); color: #04140d; } .res-dot.D { background: #4b5563; } .res-dot.L { background: var(--loss); }
+
+/* League news (js/manager-news.js; post styles are in css/news.css) */
+#pane .nw-post { scroll-margin-top: calc(130px + env(safe-area-inset-top)); }   /* clear the sticky top bar and tabs */
+.mg-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: #ef4444; color: #fff; font-size: .7rem; font-weight: 900; vertical-align: 1px; }
+.mg-wanted { padding: 10px 12px; border-radius: 12px; background: rgba(143,255,6,.08); color: var(--text) !important; font-weight: 700; }
+.nwb { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-lg); background: linear-gradient(135deg, rgba(230,167,52,.16), rgba(230,167,52,.05)); border: 1px solid rgba(230,167,52,.45); animation: fadeIn .3s ease-out; }
+.nwb.late { background: linear-gradient(135deg, rgba(239,68,68,.2), rgba(239,68,68,.06)); border-color: rgba(239,68,68,.6); }
+.nwb-head { display: flex; align-items: center; gap: 10px; font-size: .95rem; }
+.nwb-icon { font-size: 1.3rem; }
+.nwb-list { display: grid; gap: 6px; }
+.nwb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "title due go" "why due go"; align-items: center; gap: 2px 10px; width: 100%; padding: 10px 12px; min-height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); background: rgba(15,17,21,.55); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.nwb-row:hover { border-color: rgba(255,255,255,.3); }
+.nwb-row.overdue { border-color: rgba(239,68,68,.7); }
+.nwb-title { grid-area: title; font-weight: 800; font-size: .9rem; overflow-wrap: anywhere; }
+.nwb-why { grid-area: why; font-size: .78rem; color: var(--muted); font-weight: 600; }
+.nwb-row .nw-chip { grid-area: due; }
+.nwb-go { grid-area: go; color: var(--muted); font-size: 1.2rem; }
+@media (max-width: 520px) {
+  .nwb-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title go" "why go" "due go"; }
+  .nwb-row .nw-chip { justify-self: start; margin-top: 4px; }
+}

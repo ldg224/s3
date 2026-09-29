@@ -1,13 +1,14 @@
 # Manager Hub setup (about 5 minutes, once)
 
-Managers sign in at **manager.html** with an email and PIN you choose. They can set their
-lineup, formation, tactics and set pieces, see their players' season ratings, and answer
-questions from the media (published in the **Press room**).
+Managers sign in at **manager.html** with an email and PIN you choose. They read **League news**
+(the first tab: announcements, polls and forms from edit mode), set their lineup, formation,
+tactics and set pieces, see their players' season ratings, and answer questions from the media
+(published in the **Press room**).
 
 The website is public and has no server, so managers' saves go through a small free
 Google Apps Script on your Google account. It checks the manager's email and PIN, and can only
-save that manager's own team file (`data/teams/<code>.json`). Your GitHub key is kept inside
-the script, never on the website.
+save that manager's own team file (`data/teams/<code>.json`) and images they upload in a news
+form (`data/uploads/<code>/`). Your GitHub key is kept inside the script, never on the website.
 
 ## 1. Make a GitHub key for the script
 
@@ -47,6 +48,23 @@ the script, never on the website.
 That's it. Each manager save appears in the site's GitHub history as
 "Manager: <team> …" and goes live within about a minute.
 
+## Updating the script for League news (September 2026)
+
+The League news feature needs the new version of the script: it adds "Got it" read receipts,
+poll votes, form answers and image uploads. Until you update it, managers can still read news,
+but those buttons show an error.
+
+1. Open <https://script.google.com> → **HCL manager relay**.
+2. Select all the code in `Code.gs` and delete it. Paste in everything from
+   [`tools/manager-relay.gs`](../tools/manager-relay.gs), then click the save icon.
+3. **Deploy** → **Manage deployments** → click the pencil (edit) on the existing deployment →
+   Version: **New version** → **Deploy**. Don't create a new deployment: the URL must stay the same.
+4. On the site, edit mode → **Settings** → **Manager Hub** → **Test the link**. It should still say
+   "✓ The relay is working".
+
+No new permissions or script properties are needed. The GitHub key only needs **Contents: Read
+and write** on `ldg224/s3`, as before.
+
 ## Notes
 
 - **Changing the script later:** if `tools/manager-relay.gs` is updated, paste the new version in,
@@ -57,3 +75,8 @@ That's it. Each manager save appears in the site's GitHub history as
 - **Wrong guesses:** after 8 wrong PINs for a team, that team's saves are locked for 15 minutes.
 - **What managers can't do:** change results, fixtures, other teams or anything else. The script
   only writes their own team file, and only with valid players from their own squad.
+- **League news:** managers can only answer posts that are live and sent to their team. The script
+  checks every answer against its question, allows one poll vote per team, and only accepts PNG,
+  JPG or WebP images up to 400 KB (the portal shrinks them to 512 px first). A lineup save never
+  changes a team's news answers. Answers to a registration form change nothing until you approve
+  them in edit mode (News tab).

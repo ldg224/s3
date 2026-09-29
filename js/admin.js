@@ -208,7 +208,7 @@ function refresh() {
   const n = pendingCount();
   showState();
   panel.querySelector('[data-publish]').disabled = !n || publishing;
-  const tabs = [['fixtures', 'Fixtures'], ['generate', 'Generate'], ['upload', 'Upload match'], ['teams', 'Teams'], ['players', 'Players'], ['league', 'League'], ['history', 'History'], ['settings', 'Settings']];
+  const tabs = [['fixtures', 'Fixtures'], ['news', 'News'], ['generate', 'Generate'], ['upload', 'Upload match'], ['teams', 'Teams'], ['players', 'Players'], ['league', 'League'], ['history', 'History'], ['settings', 'Settings']];
   const tb = panel.querySelector('.ed-tabs');
   tb.innerHTML = tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
   tb.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; refresh(); } };
@@ -217,15 +217,27 @@ function refresh() {
   body.onchange = null;
   body.onclick = null;
   body.oninput = null;
-  ({ fixtures: fixturesTab, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, league: leagueTabHost, history: historyTab, settings: settingsTab })[tab](body);
-  // Show edits on the page immediately (only when something actually changed).
+  ({ fixtures: fixturesTab, news: newsTabHost, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, league: leagueTabHost, history: historyTab, settings: settingsTab })[tab](body);
+  syncDraft();
+}
+
+// Show edits on the page immediately and queue the auto-publish (only when something actually changed).
+function syncDraft() {
   const sig = JSON.stringify(draft) + uploads.size;
-  if (sig !== refresh.sig) {
-    refresh.sig = sig;
+  if (sig !== syncDraft.sig) {
+    syncDraft.sig = sig;
     setSeason(draft);
     window.dispatchEvent(new CustomEvent('season-changed', { detail: draft }));
     scheduleAutoPublish();
   }
+}
+
+// The draft changed but the tab doesn't need re-rendering (e.g. typing in the news composer).
+function touch() {
+  if (!panel) return;
+  showState();
+  panel.querySelector('[data-publish]').disabled = !pendingCount() || publishing;
+  syncDraft();
 }
 
 // ---------- Fixtures ----------
@@ -698,6 +710,28 @@ function generateTab(body) {
   preview();
 }
 
+// ---------- News, forms and polls: js/admin-news.js (format in docs/NEWS.md) ----------
+
+// A file straight from the repo (not the Pages copy, which lags): Blob, or null if it doesn't exist.
+async function readRepo(path) {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}?ref=${BRANCH}&t=${Date.now()}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' }, cache: 'no-store',
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub: couldn't read ${path} (${res.status})`);
+  return res.blob();
+}
+
+let newsMod;
+function newsTabHost(body) {
+  const ctx = { get draft() { return draft; }, refresh, touch, esc, uploads, readRepo };
+  if (newsMod) return newsMod.newsTab(body, ctx);
+  body.innerHTML = '<div class="ed-section"><p class="ed-hint">Loading…</p></div>';
+  import('./admin-news.js')
+    .then(m => { newsMod = m; if (tab === 'news') refresh(); })
+    .catch(e => { body.innerHTML = `<div class="ed-section"><h3>News</h3><p class="ed-err">Couldn't load the news editor: ${esc(e.message)}</p></div>`; });
+}
+
 // ---------- League (finals, suspensions, adjustments, rescheduling): js/admin-league.js ----------
 
 let leagueMod;
@@ -855,8 +889,14 @@ function describeChanges(a, b, files) {
   if (['season', 'live_minutes', 'notice', 'points', 'manager_relay'].some(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]))) parts.push('settings changed');
   if (JSON.stringify(a.managers || {}) !== JSON.stringify(b.managers || {})) parts.push('manager logins updated');
   if (JSON.stringify(a.press_questions || []) !== JSON.stringify(b.press_questions || [])) parts.push('press questions updated');
-  const logos = files.filter(([path]) => path.startsWith('assets/')).length;
+  const sentNow = (b.news || []).filter(n => n.status === 'live' && (a.news || []).find(o => o.id === n.id)?.status !== 'live').length;
+  if (sentNow) parts.push(`${sentNow} news post${sentNow > 1 ? 's' : ''} sent`);
+  else if (JSON.stringify(a.news || []) !== JSON.stringify(b.news || [])) parts.push('news updated');
+  if (JSON.stringify(a.news_templates || []) !== JSON.stringify(b.news_templates || [])) parts.push('news templates updated');
+  const logos = files.filter(([path]) => path.startsWith('assets/teams/')).length;
   if (logos) parts.push(`${logos} logo${logos > 1 ? 's' : ''} uploaded`);
+  const images = files.filter(([path]) => path.startsWith('assets/news/')).length;
+  if (images) parts.push(`${images} news image${images > 1 ? 's' : ''} uploaded`);
   return parts.join(', ') || 'saved';
 }
 
