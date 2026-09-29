@@ -2,7 +2,7 @@
 // (this team's played matches). manager.js calls scoutPane(pane, ctx) / reportsPane(pane, ctx) with
 // ctx = { season, team, teamFile, teams }. Read-only: nothing here saves anything.
 
-import { kickoff, finished, ladder, resultFor, winChance, playerTotals, byKickoff } from './data.js';
+import { kickoff, status, finished, ladder, resultFor, winChance, playerTotals, byKickoff } from './data.js';
 import { esc, logo, safeColour, onColour, fmtDate, fmtTime, matchUrl } from './ui.js';
 import { FORMATIONS, TACTICS, PRESETS, squadOf, normaliseTeamFile, loadTeamFile } from './managers.js';
 import { suspensions, isKnockout, STAGE_NAMES } from './league.js';
@@ -44,9 +44,10 @@ function teamSeason(S, code) {
 
 export async function scoutPane(pane, ctx) {
   const S = ctx.season, me = ctx.team, T = ctx.teams;
-  // Next match that will actually be played (not postponed, both teams known).
-  const now = new Date();
-  const next = S.fixtures.filter(f => !f.result && !f.postponed && f.home && f.away && [f.home, f.away].includes(me) && kickoff(f) > now).sort(byKickoff)[0] || null;
+  // Next match still to kick off (not postponed, both teams known). Matches are often simulated
+  // in advance, so "upcoming" is about the kick-off time, not whether a result exists.
+  const upcoming = f => status(f, S) === 'upcoming' && f.home && f.away;
+  const next = S.fixtures.filter(f => upcoming(f) && [f.home, f.away].includes(me)).sort(byKickoff)[0] || null;
   const nextOpp = next ? (next.home === me ? next.away : next.home) : null;
   const others = S.teams.map(t => t.code).filter(c => c !== me);
   const code = others.includes(scouted) ? scouted : nextOpp || others[0];
@@ -61,7 +62,7 @@ export async function scoutPane(pane, ctx) {
   const totals = playerTotals(S);
   const st = id => totals[id] || { apps: 0, g: 0, a: 0, avg: 0, yc: 0, rc: 0 };
   const ts = teamSeason(S, code);
-  const fx = next && nextOpp === code ? next : S.fixtures.filter(f => !f.result && kickoff(f) > new Date() && [f.home, f.away].includes(me) && [f.home, f.away].includes(code)).sort(byKickoff)[0];
+  const fx = next && nextOpp === code ? next : S.fixtures.filter(f => upcoming(f) && [f.home, f.away].includes(me) && [f.home, f.away].includes(code)).sort(byKickoff)[0];
   const out = fx ? (suspensions(S).get(fx.id) || []).filter(s => P[s.player]) : [];
   const outIds = new Set(out.map(s => String(s.player)));
 

@@ -45,7 +45,8 @@ export function leagueTab(body, ctx) {
 
   // ---- Suspensions
   const susp = L.suspensions(S);
-  const upcoming = S.fixtures.filter(f => !f.result && susp.has(f.id)).sort(byKickoff);
+  const now = new Date(), notStarted = f => !kickoff(f) || kickoff(f) > now;   // results are often simulated in advance
+  const upcoming = S.fixtures.filter(f => notStarted(f) && susp.has(f.id)).sort(byKickoff);
   const auto = upcoming.map(f => `<div class="q-row"><span><b>${label(f)}</b> <span class="ed-hint">${esc(fmt(f))}</span><br>${susp.get(f.id).map(s => `${esc(s.name || s.player)} <span class="ed-hint">(${esc(s.reason)})</span>`).join(', ')}</span></div>`).join('');
   const nameOf = id => S.players.find(p => String(p.id) === String(id));
   const bans = (S.bans || []).map(b => `<div class="q-row"><span>${esc(nameOf(b.player)?.name || b.player)} <span class="ed-hint">${esc(nameOf(b.player)?.team || '')} · ${b.matches} match${b.matches > 1 ? 'es' : ''} from ${esc(b.from)}${b.reason ? ` · ${esc(b.reason)}` : ''}</span></span>
@@ -59,8 +60,8 @@ export function leagueTab(body, ctx) {
 
   // ---- Rescheduling
   const postponed = S.fixtures.filter(f => f.postponed).sort(byKickoff);
-  const open = S.fixtures.filter(f => !f.result && !f.postponed && f.home && f.away).sort(byKickoff);
-  const weeks = [...new Set(S.fixtures.filter(f => !f.result && !f.postponed && f.date && f.week != null).map(f => f.week))].sort((a, b) => a - b);
+  const open = S.fixtures.filter(f => notStarted(f) && !f.postponed && f.home && f.away).sort(byKickoff);
+  const weeks = [...new Set(S.fixtures.filter(f => notStarted(f) && !f.postponed && f.date && f.week != null).map(f => f.week))].sort((a, b) => a - b);
   const pp = postponed.map(f => `<div class="q-row" data-id="${esc(f.id)}"><span><b>${label(f)}</b> <span class="ed-hint">was ${esc(fmt(f))}${f.postponed_reason ? ` · ${esc(f.postponed_reason)}` : ''}</span></span>
     <span class="ed-row" style="flex-wrap:nowrap"><input class="ed-input" type="date" data-k="date" value="${esc(f.date || '')}" aria-label="New date"><input class="ed-input" type="time" data-k="time" value="${esc(f.time || '')}" aria-label="New time">
     <button class="ed-btn small primary" data-act="reschedule">Reschedule</button></span></div>`).join('');

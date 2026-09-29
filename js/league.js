@@ -46,11 +46,12 @@ export function reschedule(fixture, date, time) {
   return [fixture];
 }
 
-// Move every unplayed fixture in a week by `days` (negative moves earlier). Postponed ones stay put.
-export function shiftWeek(season, week, days) {
+// Move every fixture in a week that hasn't kicked off yet by `days` (negative moves earlier),
+// including ones already simulated in advance. Postponed ones stay put.
+export function shiftWeek(season, week, days, now = new Date()) {
   const changed = [];
   for (const f of season.fixtures) {
-    if (String(f.week) !== String(week) || f.result || f.postponed || !f.date) continue;
+    if (String(f.week) !== String(week) || f.postponed || !f.date || kickoff(f) <= now) continue;
     remember(f);
     const d = kickoff(f);
     d.setDate(d.getDate() + days);
