@@ -347,6 +347,8 @@ async function openVideoExport(f) {
 
   go.onclick = async () => {
     err.textContent = '';
+    cancelled = false;
+    let partial = null;   // an unfinished .mp4 in the folder, removed if the export doesn't complete
     try {
       // Folder first (needs this click as the user gesture).
       if (canPickFolder()) {
@@ -361,6 +363,7 @@ async function openVideoExport(f) {
       const base = safe(`Week ${f.week} - ${f.home} ${f.result.home}-${f.result.away} ${f.away} Highlights`);
       const t0 = performance.now();
       const fileHandle = folder ? await folder.getFileHandle(`${base}.mp4`, { create: true }) : null;
+      if (fileHandle) partial = `${base}.mp4`;
       const mp4 = await hl.exportVideo(r, {
         fileHandle,
         isCancelled: () => cancelled,
@@ -371,6 +374,7 @@ async function openVideoExport(f) {
         },
         onPreview: cv => pv.drawImage(cv, 0, 0, 480, 270),
       });
+      partial = null;   // the video file is complete
       status.textContent = 'Making the thumbnail…';
       const thumb = await hl.makeThumbnail(r), text = hl.youtubeText(r).text;
       const files = [[`${base} - Thumbnail.png`, thumb], [`${base} - YouTube.txt`, new Blob([text], { type: 'text/plain' })]];
@@ -387,6 +391,11 @@ async function openVideoExport(f) {
     } catch (e) {
       err.textContent = e.message === 'Cancelled' ? 'Export cancelled.' : (e.name === 'AbortError' ? 'No folder chosen.' : `Couldn't make the video: ${e.message}`);
       bar.style.width = '0';
+      if (folder && partial) {
+        // Don't leave a half-written video in the folder.
+        try { await folder.removeEntry(partial); err.textContent += ' The unfinished video file was removed.'; }
+        catch { err.textContent += ` The unfinished file "${partial}" is still in the folder; delete it.`; }
+      }
     } finally {
       running = false; go.disabled = false; go.textContent = 'Export again'; close.textContent = 'Close';
     }

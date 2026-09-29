@@ -106,6 +106,11 @@ function attackStart(d, e) {
   return clamp(first - 1.5, e.t - 13, e.t - 5);
 }
 
+// Card moments need time after the foul for the referee to arrive and show the card (ref cam).
+export const CARD_AFTER = 6.5;
+// Most of each kind of moment in one video, so it isn't wall-to-wall saves.
+const KIND_CAP = { save: 2, chance: 3, woodwork: 2, yellow: 2, red: 2, goal: 99 };
+
 export function planHighlights(d, targetSeconds = 180) {
   const shots = d.events.filter(e => e.type === 'shot');
   const cand = [];
@@ -114,20 +119,27 @@ export function planHighlights(d, targetSeconds = 180) {
       const shot = shots.find(s => s.id === e.shot) || null;
       cand.push({ kind: 'goal', score: 100 + e.t / 1e4, t: e.t, t0: attackStart(d, shot || e), t1: e.t + 4.5, e, shot });
     } else if (e.type === 'shot' && e.outcome !== 'goal') {
-      const big = e.xg >= 0.15, saved = e.outcome === 'saved' && e.xg >= 0.04, wood = e.outcome === 'woodwork';
-      if (big || saved || wood || e.on_target) cand.push({ kind: wood ? 'woodwork' : saved ? 'save' : 'chance', score: 30 + e.xg * 60 + (wood ? 25 : 0) + (saved ? 8 : 0), t: e.t, t0: attackStart(d, e), t1: e.t + 2.8, e });
-    } else if (e.type === 'card' && e.card !== 'yellow') {
-      cand.push({ kind: 'red', score: 55, t: e.t, t0: e.t - 5, t1: e.t + 2.5, e });
+      // Only genuine chances: a real save from a good opening, a big miss, or the woodwork.
+      const wood = e.outcome === 'woodwork';
+      const save = e.outcome === 'saved' && e.xg >= 0.12;
+      const chance = e.outcome !== 'saved' && e.xg >= 0.2;
+      if (wood || save || chance) cand.push({ kind: wood ? 'woodwork' : save ? 'save' : 'chance', score: 30 + e.xg * 70 + (wood ? 25 : 0), t: e.t, t0: attackStart(d, e), t1: e.t + 2.8, e });
+    } else if (e.type === 'card') {
+      const red = e.card !== 'yellow';
+      const foul = [...d.events].reverse().find(f => f.type === 'foul' && f.player === e.player && f.t <= e.t + 0.01 && e.t - f.t < 3);
+      const ft = foul ? foul.t : e.t;
+      cand.push({ kind: red ? 'red' : 'yellow', score: red ? 60 : 32, t: ft, t0: ft - 6, t1: ft + CARD_AFTER, e, foul });
     }
   }
   const fixed = 4.5 + 4.5 + 3.5 + 9 + 5.5 + 4.5;   // intro, versus, half-time, full-time, motm, outro
   let budget = targetSeconds - fixed;
-  const picked = [];
+  const picked = [], used = {};
   for (const c of cand.sort((a, b) => b.score - a.score)) {
     const len = c.t1 - c.t0;
+    if ((used[c.kind] || 0) >= KIND_CAP[c.kind]) continue;
     if (len > budget && picked.length) continue;
     if (picked.some(p => c.t0 < p.t1 + 1 && c.t1 > p.t0 - 1)) continue;   // overlaps another clip
-    picked.push(c); budget -= len;
+    picked.push(c); budget -= len; used[c.kind] = (used[c.kind] || 0) + 1;
   }
   picked.sort((a, b) => a.t - b.t);
   // Spare time: widen clips a little so the video lands near the target length.
@@ -439,43 +451,121 @@ export class HighlightsRenderer {
     }
     if (tA == null) tA = evL - 3;
     tA = clamp(tA, Math.min(2.5, evL - 1.5), Math.max(0, evL - 2.2));
-    const opening = ['main', 'wide', 'main', 'high'][idx % 4];
-    const climax = clip.kind === 'red' ? 'tight' : clip.kind === 'save' ? 'endcam' : ['endcam', 'tight', 'endcam', 'main'][idx % 4];
+    const opening = ['main', 'wide', 'corner', 'high', 'spider'][idx % 5];
+    const climax = clip.kind === 'save' ? 'endcam' : ['endcam', 'tight', 'corner', 'endcam', 'main'][idx % 5];
     const shots = [];
-    if (tA >= 2) shots.push({ from: 0, to: tA, angle: opening });
-    const after = evL + (clip.kind === 'goal' ? 1.2 : 0.9);
-    shots.push({ from: shots.length ? tA : 0, to: Math.min(dur, after), angle: climax });
-    if (dur - after >= 1.6) shots.push({ from: after, to: dur, angle: clip.kind === 'goal' ? 'celebrate' : 'main' });
-    else shots[shots.length - 1].to = dur;
+    const card = clip.kind === 'yellow' || clip.kind === 'red';
+    if (card) {
+      // Build-up, a close look at the foul (the player goes down), then REF CAM for the card.
+      const foulL = evL, refFrom = Math.min(dur - 1.5, foulL + 1.7);
+      if (foulL - 2.5 >= 2) shots.push({ from: 0, to: foulL - 2.5, angle: opening });
+      shots.push({ from: shots.length ? foulL - 2.5 : 0, to: refFrom, angle: 'tight' });
+      shots.push({ from: refFrom, to: dur, angle: 'refcam' });
+    } else {
+      if (tA >= 2) shots.push({ from: 0, to: tA, angle: opening });
+      const after = evL + (clip.kind === 'goal' ? 1.2 : 0.9);
+      shots.push({ from: shots.length ? tA : 0, to: Math.min(dur, after), angle: climax });
+      if (dur - after >= 1.6) shots.push({ from: after, to: dur, angle: clip.kind === 'goal' ? 'celebrate' : 'main' });
+      else shots[shots.length - 1].to = dur;
+    }
+    // Break up long shots with a second angle, so no single camera holds for too long.
+    for (let i = 0; i < shots.length; i++) {
+      const sh = shots[i], len = sh.to - sh.from;
+      if (len > 8 && !['celebrate', 'refcam'].includes(sh.angle)) {
+        const alt = { main: 'wide', wide: 'main', corner: 'main', high: 'wide', spider: 'main', endcam: 'main', tight: 'main' }[sh.angle] || 'main';
+        const mid = sh.to - Math.min(6, len / 2);
+        shots.splice(i, 1, { from: sh.from, to: mid, angle: alt }, { from: mid, to: sh.to, angle: sh.angle });
+        i++;
+      }
+    }
+    const plan = { shots, goalX };
+    this.planReferee(s, plan);
     // Scorer, followed by the celebration camera.
     const scorerIdx = clip.kind === 'goal' ? this.d.players.findIndex(p => p.id === ev.scorer) : -1;
     // Smoothed target path per shot, so cuts are clean and each shot glides.
     for (const sh of shots) {
       const n = Math.ceil((sh.to - sh.from) * FPS) + 2, raw = [];
       for (let i = 0; i < n; i++) {
-        const st = this.fr.at(s.t0 + sh.from + i / FPS);
-        raw.push(sh.angle === 'celebrate' && scorerIdx >= 0 ? st.players[scorerIdx] : st.ball);
+        const t = s.t0 + sh.from + i / FPS, st = this.fr.at(t);
+        if (sh.angle === 'celebrate' && scorerIdx >= 0) raw.push(st.players[scorerIdx]);
+        else if (sh.angle === 'refcam') raw.push(this.refAt(plan, t));
+        else if (card && sh.angle === 'tight' && clip.foul && t >= clip.foul.t) raw.push([clip.foul.x, clip.foul.y]);
+        else raw.push(st.ball);
       }
-      const a = sh.angle === 'tight' || sh.angle === 'celebrate' ? 0.12 : 0.07;
+      const a = sh.angle === 'tight' || sh.angle === 'celebrate' || sh.angle === 'refcam' ? 0.12 : 0.07;
       const path = []; let cx = raw[0][0], cy = raw[0][1];
       for (const b of raw) { cx = lerp(cx, b[0], a); cy = lerp(cy, b[1], a); path.push([cx, cy]); }
       for (let i = path.length - 2; i >= 0; i--) { path[i][0] = lerp(path[i][0], path[i + 1][0], a * 2); path[i][1] = lerp(path[i][1], path[i + 1][1], a * 2); }
       sh.path = path;
     }
-    const plan = { shots, goalX };
     this.camState.set(s, plan);
     return plan;
   }
 
+  // The referee isn't in the match data, so he's animated here: he shadows play from the
+  // inside of the pitch, about 10-15 m away, and sprints to the spot when there's a foul.
+  // Fouled players go down; cards are shown by the referee once he arrives.
+  planReferee(s, plan) {
+    const t0 = s.t0, n = Math.ceil(s.dur * FPS) + 2;
+    const fouls = this.d.events.filter(e => e.type === 'foul' && e.t >= t0 - 1 && e.t <= t0 + s.dur);
+    const cards = this.d.events.filter(e => e.type === 'card' && e.t >= t0 - 1 && e.t <= t0 + s.dur);
+    const ideal = b => [b[0] + (b[0] > 52.5 ? -11 : 11), b[1] + (b[1] < 34 ? 10 : -10)];
+    let [rx, ry] = ideal(this.fr.at(t0).ball), vx = 0, vy = 0;
+    const path = [];
+    for (let i = 0; i < n; i++) {
+      const t = t0 + i / FPS, b = this.fr.at(t).ball;
+      let [tx, ty] = ideal(b), vmax = 5.5;
+      const f = fouls.find(f => t >= f.t && t < f.t + 6);
+      if (f) { tx = f.x + 1.6; ty = f.y + (f.y < 34 ? 1.4 : -1.4); vmax = 7.6; }
+      const dx = tx - rx, dy = ty - ry, d = Math.hypot(dx, dy);
+      const want = Math.min(vmax, Math.sqrt(2 * 4 * Math.max(0, d - 0.4)));
+      let dvx = (d > 1e-6 ? dx / d * want : 0) - vx, dvy = (d > 1e-6 ? dy / d * want : 0) - vy;
+      const dv = Math.hypot(dvx, dvy), lim = 5 / FPS;
+      if (dv > lim) { dvx *= lim / dv; dvy *= lim / dv; }
+      vx += dvx; vy += dvy; rx = clamp(rx + vx / FPS, -1, 106); ry = clamp(ry + vy / FPS, -1, 69);
+      path.push([rx, ry]);
+    }
+    plan.ref = { t0, path };
+    plan.falls = fouls.map(f => {
+      const idx = this.d.players.findIndex(p => p.id === f.on);
+      if (idx < 0) return null;
+      const pos = this.fr.at(f.t).players[idx];
+      const prev = this.fr.at(f.t - 0.3).players[idx];
+      return { idx, t: f.t, until: f.t + 3.2, x: pos[0], y: pos[1], ang: Math.atan2(pos[1] - prev[1], pos[0] - prev[0]) || 0 };
+    }).filter(Boolean);
+    // Card goes up once the referee reaches the players.
+    plan.cards = cards.map(c => {
+      const f = fouls.find(f => f.player === c.player && c.t - f.t < 3) || { t: c.t, x: c.x, y: c.y };
+      let up = f.t + 1.5;
+      for (let t = f.t; t < f.t + 5; t += 0.1) { const r = this.refAt(plan, t); if (Math.hypot(r[0] - f.x, r[1] - f.y) < 3.5) { up = t + 0.6; break; } }
+      return { t: up, until: up + 3.8, colour: c.card === 'yellow' ? 'yellow' : 'red', player: c.player, foulT: f.t };
+    });
+  }
+  refAt(plan, t) {
+    const p = plan.ref.path;
+    return p[clamp(Math.round((t - plan.ref.t0) * FPS), 0, p.length - 1)];
+  }
+
   camFor(s, local) {
     const tSim = s.t0 + local;
-    const { shots, goalX } = this.shotsFor(s);
+    const plan = this.shotsFor(s), { shots, goalX } = plan;
     const sh = shots.find(x => local >= x.from && local < x.to) || shots[shots.length - 1];
     const [bx, by] = sh.path[clamp(Math.round((local - sh.from) * FPS), 0, sh.path.length - 1)];
     const toGoal = Math.hypot(bx - goalX, by - 34);
     const gs = goalX === 105 ? 1 : -1;
     let cam;
     switch (sh.angle) {
+      case 'corner': { // high in the corner of the stand, looking diagonally across the box
+        const cy = by < 34 ? -16 : 84;
+        cam = makeCamAt([goalX + gs * 16, cy, 21], [lerp(bx, goalX, 0.25), lerp(by, 34, 0.3), 0], 42); break;
+      }
+      case 'spider': // overhead cable camera following the ball
+        cam = makeCam(clamp(bx, 10, 95), clamp(by, 10, 58), 30, 72, 52); break;
+      case 'refcam': { // close on the referee, slowly pushing in
+        const k = clamp((local - sh.from) / Math.max(1, sh.to - sh.from), 0, 1);
+        const dist = lerp(12.5, 9.5, easeInOut(k)), e = 10 * Math.PI / 180;
+        cam = makeCamAt([bx, by + dist * Math.cos(e), 1.7 + dist * Math.sin(e)], [bx, by, 1.75], 36); break;
+      }
       case 'wide':   // high and far: shows the team shapes
         cam = makeCam(clamp(lerp(bx, 52.5, 0.4), 30, 75), 34 + (by - 34) * 0.3, 74, 44, 38); break;
       case 'high':   // steep from the gantry, following play
@@ -493,17 +583,29 @@ export class HighlightsRenderer {
         cam = makeCam(clamp(lerp(bx, goalX, k), 10, 95), clamp(lerp(by, 34, k * 0.6), 14, 54), 36, 27, 38);
       }
     }
-    return { cam, tSim, cut: local - sh.from < 1 / FPS };
+    return { cam, tSim, cut: local - sh.from < 1 / FPS, angle: sh.angle, plan };
   }
 
   drawClip(s, local) {
     const c = this.c;
-    const { cam, tSim, cut } = this.camFor(s, local);
+    const { cam, tSim, cut, angle, plan } = this.camFor(s, local);
     const st = this.fr.at(tSim);
     this.drawPitch(cam);
     this.drawGoal(cam, 0); this.drawGoal(cam, 105);
-    // Players far to near (by distance from this camera)
-    const items = st.players.map((p, i) => ({ i, x: p[0], y: p[1], d: cam.p(p[0], p[1])?.[2] ?? 0 }));
+    // Players (and the referee) far to near, by distance from this camera
+    const items = st.players.map((p, i) => {
+      const fall = plan.falls.find(f => f.idx === i && tSim >= f.t && tSim < f.until + 0.5);
+      let x = p[0], y = p[1], lying = false;
+      if (fall) {
+        // Down where he was fouled, then gets back up and rejoins his real position.
+        const k = seg01(tSim, fall.until, fall.until + 0.5);
+        x = lerp(fall.x, p[0], k); y = lerp(fall.y, p[1], k); lying = tSim < fall.until ? fall : false;
+      }
+      return { i, x, y, lying, d: cam.p(x, y)?.[2] ?? 0 };
+    });
+    const [rx, ry] = this.refAt(plan, tSim);
+    const card = plan.cards.find(k => tSim >= k.t && tSim < k.until);
+    items.push({ ref: true, x: rx, y: ry, card, d: cam.p(rx, ry)?.[2] ?? 0 });
     items.sort((a, b) => a.d - b.d);
     // ball trail (reset on every camera cut)
     const bp = cam.p(st.ball[0], st.ball[1], st.ball[2]);
@@ -513,14 +615,75 @@ export class HighlightsRenderer {
     let ballDrawn = false;
     for (const it of items) {
       if (!ballDrawn && it.d > bd) { this.drawBall(cam, st); ballDrawn = true; }
-      this.drawPlayer(cam, it, st.holder === it.i);
+      if (it.ref) this.drawReferee(cam, it, tSim);
+      else if (it.lying) this.drawLying(cam, it);
+      else this.drawPlayer(cam, it, st.holder === it.i);
     }
     if (!ballDrawn) this.drawBall(cam, st);
     // Vignette
     const v = c.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.0);
     v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.45)');
     c.fillStyle = v; c.fillRect(0, 0, W, H);
-    this.drawClipOverlays(s, local, tSim);
+    if (angle === 'refcam') this.drawRefCamOverlay(local);
+    this.drawClipOverlays(s, local, tSim, plan);
+  }
+
+  drawRefCamOverlay(local) {
+    const c = this.c;
+    // Letterbox bars and a "REF CAM" tag, like a broadcast's referee camera.
+    c.fillStyle = 'rgba(0,0,0,0.85)'; c.fillRect(0, 0, W, 70); c.fillRect(0, H - 70, W, 70);
+    const x = W - 330, y = 100;
+    this.pill(x, y, 270, 60, 'rgba(15,17,21,0.9)', 12);
+    if (Math.floor(local * 2) % 2 === 0) { c.fillStyle = '#ef4444'; c.beginPath(); c.arc(x + 34, y + 30, 10, 0, Math.PI * 2); c.fill(); }
+    this.text('REF CAM', x + 58, y + 42, { size: 32, weight: 900, spacing: 4 });
+    c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 3;
+    for (const [cx, cy, sx, sy] of [[90, 110, 1, 1], [W - 90, 110 + 80, -1, 1], [90, H - 110, 1, -1], [W - 90, H - 110, -1, -1]]) {
+      c.beginPath(); c.moveTo(cx, cy + sy * 40); c.lineTo(cx, cy); c.lineTo(cx + sx * 40, cy); c.stroke();
+    }
+  }
+
+  // Referee: black kit; runs in after a foul and holds the card up, with its colour shown above his head.
+  drawReferee(cam, it, tSim) {
+    const c = this.c, p = cam.p(it.x, it.y); if (!p) return;
+    const head = cam.p(it.x, it.y, 1.85); if (!head) return;
+    const bh = p[1] - head[1], bw = Math.max(12, bh * 0.42), bx = p[0], top = head[1];
+    const r = Math.max(10, p[2] * 0.6);
+    c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(bx + r * 0.4, p[1], r * 1.05, r * 0.42, 0, 0, Math.PI * 2); c.fill();
+    const g = c.createLinearGradient(bx - bw, 0, bx + bw, 0); g.addColorStop(0, '#2b2f38'); g.addColorStop(1, '#0b0d11');
+    c.fillStyle = g; c.beginPath(); c.roundRect(bx - bw / 2, top + bh * 0.28, bw, bh * 0.72, bw / 2); c.fill();
+    c.fillStyle = LIME; c.fillRect(bx - bw / 2, top + bh * 0.3, bw, Math.max(2, bh * 0.04));   // collar trim
+    c.fillStyle = '#e8b894'; c.beginPath(); c.arc(bx, top + bh * 0.16, bw * 0.34, 0, Math.PI * 2); c.fill();
+    if (it.card) {
+      const col = it.card.colour === 'yellow' ? '#facc15' : '#ef4444';
+      const k = easeOut((tSim - it.card.t) / 0.25);
+      // Raised arm and the card in his hand
+      const shoulder = [bx + bw * 0.35, top + bh * 0.34], hand = [bx + bw * 0.55, top - bh * 0.28 * k];
+      c.strokeStyle = '#1d212a'; c.lineWidth = Math.max(3, bw * 0.28); c.lineCap = 'round';
+      c.beginPath(); c.moveTo(...shoulder); c.lineTo(...hand); c.stroke();
+      const cw = Math.max(8, bw * 0.5), ch = cw * 1.4;
+      c.fillStyle = col; c.fillRect(hand[0] - cw / 2, hand[1] - ch, cw, ch);
+      // Big card icon floating above his head so it reads at any distance
+      const iw = clamp(bw * 0.8, 24, 70), ih = iw * 1.4, ix = bx - iw / 2, iy = top - ih - Math.max(14, bh * 0.22) - (1 - k) * 20;
+      c.save(); c.shadowColor = col; c.shadowBlur = 30; c.fillStyle = col; c.beginPath(); c.roundRect(ix, iy, iw, ih, 4); c.fill(); c.restore();
+      c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 2; c.strokeRect(ix, iy, iw, ih);
+    } else {
+      this.text('REF', bx, top - 10, { size: Math.max(10, bw * 0.45), weight: 900, align: 'center', colour: 'rgba(255,255,255,0.75)' });
+    }
+  }
+
+  // A fouled player lying on the grass.
+  drawLying(cam, it) {
+    const c = this.c, side = it.i < this.nHome ? 0 : 1;
+    let col = side ? this.ac : this.hc;
+    if (this.gkIdx.has(it.i)) col = side ? '#a855f7' : '#f5b042';
+    const a = it.lying.ang, hx = it.x + Math.cos(a) * 0.95, hy = it.y + Math.sin(a) * 0.95, fx = it.x - Math.cos(a) * 0.85, fy = it.y - Math.sin(a) * 0.85;
+    const H0 = cam.p(hx, hy, 0.18), F0 = cam.p(fx, fy, 0.15), M = cam.p(it.x, it.y, 0.2);
+    if (!H0 || !F0 || !M) return;
+    const w = Math.max(8, M[2] * 0.5);
+    c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(M[0], M[1] + w * 0.3, Math.abs(H0[0] - F0[0]) / 2 + w, w * 0.6, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(F0[0], F0[1]); c.lineTo(H0[0], H0[1]); c.stroke();
+    c.fillStyle = '#f1c9a5'; c.beginPath(); c.arc(H0[0], H0[1], w * 0.55, 0, Math.PI * 2); c.fill();
   }
 
   quad(cam, pts, fill) {
@@ -651,12 +814,12 @@ export class HighlightsRenderer {
     c.restore();
   }
 
-  drawClipOverlays(s, local, tSim) {
+  drawClipOverlays(s, local, tSim, plan) {
     const clip = s.clip, ev = clip.e;
     // Opening tag: minute + moment type
     const tagA = seg01(local, 0.3, 0.8) * (1 - seg01(local, 3.2, 3.7));
     if (s.type === 'clip' && tagA > 0) {
-      const label = { goal: 'GOAL', chance: 'BIG CHANCE', save: 'GREAT SAVE', woodwork: 'OFF THE WOODWORK', red: 'RED CARD' }[clip.kind];
+      const label = { goal: 'GOAL', chance: 'BIG CHANCE', save: 'GREAT SAVE', woodwork: 'OFF THE WOODWORK', red: 'RED CARD', yellow: 'BOOKING' }[clip.kind];
       const team = ev.team === this.home.code ? this.home : this.away;
       const x = 70 - (1 - easeOut(tagA)) * 60, y = H - 150;
       this.c.save(); this.c.globalAlpha = tagA;
@@ -680,6 +843,11 @@ export class HighlightsRenderer {
     if (s.type === 'clip' && clip.kind === 'goal') {
       const since = (tSim - ev.t) / s.speed;
       if (since >= 0) this.goalBanner(ev, since);
+    } else if (s.type === 'clip' && (clip.kind === 'yellow' || clip.kind === 'red')) {
+      // Caption appears as the referee shows the card.
+      const k = plan?.cards.find(x => x.player === ev.player);
+      const since = tSim - (k ? k.t : clip.t + 2);
+      if (since >= 0 && since < 3.4) this.lowerThird(clip, since);
     } else if (s.type === 'clip') {
       const since = (tSim - clip.t) / s.speed;
       if (since >= 0 && since < 3.2) this.lowerThird(clip, since);
@@ -719,13 +887,16 @@ export class HighlightsRenderer {
     const c = this.c, ev = clip.e;
     const a = easeOut(t / 0.3) * (1 - seg01(t, 2.7, 3.2));
     const text = clip.kind === 'save' ? `SAVE!  ·  ${this.keeperName(ev)}` : clip.kind === 'woodwork' ? `OFF THE ${ev.end_z > 2.2 ? 'BAR' : 'POST'}!  ·  ${lastName(this.names[ev.player])}`
-      : clip.kind === 'red' ? `RED CARD  ·  ${this.names[ev.player]}` : `SO CLOSE!  ·  ${lastName(this.names[ev.player])}  ·  xG ${ev.xg?.toFixed(2)}`;
+      : clip.kind === 'red' ? `RED CARD  ·  ${this.names[ev.player]}` : clip.kind === 'yellow' ? `YELLOW CARD  ·  ${this.names[ev.player]}`
+      : `SO CLOSE!  ·  ${lastName(this.names[ev.player])}  ·  xG ${ev.xg?.toFixed(2)}`;
+    const cardCol = clip.kind === 'red' ? '#ef4444' : clip.kind === 'yellow' ? '#facc15' : null;
     c.save(); c.globalAlpha = a;
-    c.font = `900 38px ${FONT}`; const w = c.measureText(text).width + 70;
+    c.font = `900 38px ${FONT}`; const w = c.measureText(text).width + 70 + (cardCol ? 50 : 0);
     const x = W / 2 - w / 2, y = H - 240;
     this.pill(x, y, w, 76, 'rgba(15,17,21,0.9)', 14);
     c.fillStyle = this.limeGrad(x, y, x + w, y); c.fillRect(x, y + 70, w * easeOut(t / 0.6), 6);
-    this.text(text, W / 2, y + 51, { size: 38, weight: 900, align: 'center' });
+    if (cardCol) { c.fillStyle = cardCol; c.beginPath(); c.roundRect(x + 30, y + 14, 34, 48, 5); c.fill(); }
+    this.text(text, W / 2 + (cardCol ? 25 : 0), y + 51, { size: 38, weight: 900, align: 'center' });
     c.restore();
   }
   keeperName(ev) {
@@ -784,19 +955,40 @@ export class HighlightsRenderer {
 
   // ------------------------------------------------ audio cues (output times)
 
+  // The crowd follows the play: a bed whose level rises as the ball nears goal, plus reactions
+  // to every shot, goal, save, foul and card inside each clip.
   audioCues() {
     const cues = [];
     for (let i = 1; i < this.segs.length; i++) cues.push({ type: 'whoosh', t: this.segs[i].start - 0.3 });
     cues.push({ type: 'boom', t: 0.4 }, { type: 'riser', t: 0 });
     for (const s of this.segs) {
-      if (s.type === 'clip' || s.type === 'replay') cues.push({ type: 'crowd', t: s.start, dur: s.dur, level: s.type === 'replay' ? 0.6 : 1 });
       if (s.type === 'clip') {
-        const et = s.start + (s.clip.t - s.t0) / s.speed;
-        if (s.clip.kind === 'goal') cues.push({ type: 'roar', t: et });
-        else cues.push({ type: 'ooh', t: et });
+        const step = 0.25, n = Math.max(2, Math.ceil(s.dur / step) + 1), vals = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const b = this.fr.at(s.t0 + i * step).ball;
+          const d = Math.min(Math.hypot(b[0], b[1] - 34), Math.hypot(105 - b[0], b[1] - 34));
+          vals[i] = 0.3 + 0.7 * Math.pow(clamp(1 - d / 38, 0, 1), 1.3);
+        }
+        cues.push({ type: 'crowd', t: s.start, dur: s.dur, values: vals });
+        const at = t => s.start + (t - s.t0);
+        const inClip = e => e.t >= s.t0 && e.t <= s.t0 + s.dur;
+        const plan = this.shotsFor(s);
+        for (const e of this.d.events.filter(inClip)) {
+          if (e.type === 'goal') { cues.push({ type: 'cheer', t: at(e.t) }); cues.push({ type: 'applause', t: at(e.t) + 1.8, dur: 5, level: 1 }); }
+          else if (e.type === 'shot' && e.outcome !== 'goal') cues.push({ type: 'ooh', t: at(e.t) + 0.35, level: clamp(0.45 + e.xg * 2 + (e.outcome === 'woodwork' ? 0.5 : 0), 0.4, 1.2) });
+          else if (e.type === 'save') cues.push({ type: 'applause', t: at(e.t) + 0.8, dur: 2.5, level: 0.5 });
+          else if (e.type === 'foul') { cues.push({ type: 'whistle', t: at(e.t) + 0.15, n: 1, short: true }); cues.push({ type: 'thud', t: at(e.t) }); }
+        }
+        for (const k of plan.cards) {
+          if (k.t < s.t0 || k.t > s.t0 + s.dur) continue;
+          cues.push({ type: 'boo', t: at(k.t) - 0.2, level: k.colour === 'red' ? 1 : 0.6 });
+          if (k.colour === 'red') cues.push({ type: 'refTalk', t: at(k.t) - 1.0, dur: 2.6 });
+        }
+      } else if (['halftime', 'fulltime', 'motm'].includes(s.type)) {
+        cues.push({ type: 'crowd', t: s.start, dur: s.dur, values: new Float32Array([0.18, 0.18]) });
       }
       if (s.type === 'halftime') cues.push({ type: 'whistle', t: s.start + 0.2, n: 2 });
-      if (s.type === 'fulltime') cues.push({ type: 'whistle', t: s.start + 0.2, n: 3 });
+      if (s.type === 'fulltime') { cues.push({ type: 'whistle', t: s.start + 0.2, n: 3 }); cues.push({ type: 'applause', t: s.start + 1.2, dur: 6, level: 0.8 }); }
       if (s.type === 'outro') cues.push({ type: 'boom', t: s.start + 0.2 });
     }
     return cues;
@@ -810,34 +1002,149 @@ function shade(hex, k) {
 
 // ---------------------------------------------------------------- audio synthesis
 
-async function renderAudio(cues, duration) {
+// Optional real sound files. Drop any of these into assets/audio/ (mp3, wav or ogg) and they
+// replace the generated sound: crowd (a loopable crowd bed), cheer, ooh, boo, applause,
+// whistle, ref-talk.
+export const AUDIO_FILES = ['crowd', 'cheer', 'ooh', 'boo', 'applause', 'whistle', 'ref-talk'];
+
+async function renderAudio(cues, duration, files = {}) {
   const ctx = new OfflineAudioContext(2, Math.ceil(duration * SR), SR);
+  const samples = {};
+  for (const [name, buf] of Object.entries(files)) {
+    try { samples[name] = await ctx.decodeAudioData(buf.slice(0)); } catch { /* not a usable audio file */ }
+  }
   const noise = ctx.createBuffer(2, SR * 3, SR);
   for (let ch = 0; ch < 2; ch++) { const d = noise.getChannelData(ch); let b = 0; for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; d[i] = (w * 0.35 + b * 2.2); } }
-  const master = ctx.createDynamicsCompressor(); master.threshold.value = -14; master.ratio.value = 4; master.connect(ctx.destination);
+  const master = ctx.createDynamicsCompressor(); master.threshold.value = -16; master.ratio.value = 4; master.knee.value = 8;
+  const out = ctx.createGain(); out.gain.value = 0.9; master.connect(out).connect(ctx.destination);
   const src = (t, dur) => { const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.start(t, Math.random() * 2); s.stop(t + dur); return s; };
-  const bp = (f, q) => { const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; return b; };
+  const filt = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+  const gainNode = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
+  const env = (g, t, attack, peak, hold, release) => {
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    g.gain.setValueAtTime(peak, t + attack + hold); g.gain.exponentialRampToValueAtTime(0.0001, t + attack + hold + release);
+  };
+  const playSample = (buf, t, level = 1, dur = null) => {
+    const s = ctx.createBufferSource(), g = gainNode(level); s.buffer = buf; s.connect(g).connect(master);
+    s.start(t); if (dur) { g.gain.setValueAtTime(level, t + Math.max(0, dur - 0.4)); g.gain.linearRampToValueAtTime(0, t + dur); s.stop(t + dur); }
+  };
+
+  // A crowd of human voices singing a vowel: many detuned voices through vowel formant filters.
+  const VOWELS = { oo: [320, 800, 2400], ah: [750, 1150, 2500], oh: [500, 900, 2450], eh: [550, 1750, 2500], ee: [300, 2200, 2900] };
+  function voices(t, dur, vowel, peak, count, lo, hi, glide = 1) {
+    const [f1, f2, f3] = VOWELS[vowel], bus = ctx.createGain(); bus.gain.value = 1;
+    const F = [filt('bandpass', f1, 6), filt('bandpass', f2, 8), filt('bandpass', f3, 10)];
+    const fg = [gainNode(1), gainNode(0.5), gainNode(0.18)];
+    F.forEach((f, i) => bus.connect(f).connect(fg[i]).connect(master));
+    for (let i = 0; i < count; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), st = t + Math.random() * 0.25;
+      o.type = 'sawtooth';
+      const f0 = lo + Math.random() * (hi - lo);
+      o.frequency.setValueAtTime(f0, st); o.frequency.linearRampToValueAtTime(f0 * glide, st + dur * 0.6);
+      o.detune.value = (Math.random() - 0.5) * 40;
+      const p = peak / Math.sqrt(count) * (0.6 + Math.random() * 0.8);
+      env(g, st, 0.25 + Math.random() * 0.2, p, dur * 0.35, dur * 0.55);
+      o.connect(g).connect(bus); o.start(st); o.stop(st + dur + 0.3);
+    }
+  }
+  // Applause: hundreds of individual claps rendered into a buffer.
+  function applause(t, dur, level) {
+    const n = Math.ceil(dur * SR), buf = ctx.createBuffer(2, n, SR);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch), rate = 260;
+      for (let k = 0; k < dur * rate; k++) {
+        const at = Math.floor(Math.random() * n), len = 250 + Math.random() * 450, amp = (0.3 + Math.random() * 0.7) * (1 - at / n * 0.7);
+        for (let i = 0; i < len && at + i < n; i++) d[at + i] += (Math.random() * 2 - 1) * amp * Math.exp(-i / (len * 0.25));
+      }
+    }
+    const s = ctx.createBufferSource(); s.buffer = buf;
+    const f = filt('bandpass', 1700, 0.6), g = gainNode(0.05 * level);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05 * level, t + 0.4);
+    g.gain.setValueAtTime(0.05 * level, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f).connect(g).connect(master); s.start(t);
+  }
+  // Referee talking into a radio mic: formant "speech" with a syllable rhythm and pitch contour.
+  function refTalk(t, dur) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const F = [filt('bandpass', 500, 7), filt('bandpass', 1500, 9), filt('bandpass', 2500, 10)];
+    const amp = ctx.createGain(); amp.gain.value = 0;
+    const mix = gainNode(1), radio1 = filt('highpass', 380, 0.7), radio2 = filt('lowpass', 3200, 0.7);
+    const shaper = ctx.createWaveShaper(); const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(2.2 * x); } shaper.curve = curve;
+    const outG = gainNode(0.9);
+    o.connect(amp); F.forEach((f, i) => amp.connect(f).connect(gainNode([1, 0.55, 0.25][i])).connect(mix));
+    mix.connect(radio1).connect(radio2).connect(shaper).connect(outG).connect(master);
+    const vowels = Object.values(VOWELS);
+    let tt = t, f0 = 125;
+    while (tt < t + dur - 0.15) {
+      const syl = 0.09 + Math.random() * 0.13, v = vowels[(Math.random() * vowels.length) | 0];
+      f0 = clamp(f0 + (Math.random() - 0.5) * 30, 95, 170);
+      o.frequency.setValueAtTime(f0, tt); o.frequency.linearRampToValueAtTime(f0 * (0.9 + Math.random() * 0.2), tt + syl);
+      F.forEach((f, i) => f.frequency.setTargetAtTime(v[i] * (0.9 + Math.random() * 0.2), tt, 0.02));
+      amp.gain.setTargetAtTime(0.5, tt, 0.015); amp.gain.setTargetAtTime(0.0, tt + syl * 0.8, 0.02);
+      tt += syl + (Math.random() < 0.18 ? 0.18 + Math.random() * 0.2 : 0.03);   // occasional pause between words
+    }
+    o.start(t); o.stop(t + dur + 0.2);
+    // Radio click at the start and end
+    for (const ct of [t - 0.05, t + dur]) { const s = src(ct, 0.03), g = gainNode(0.3); s.connect(filt('highpass', 2000, 0.7)).connect(g).connect(master); }
+  }
+  function whistle(t, n, short) {
+    for (let i = 0; i < n; i++) {
+      const st = t + i * 0.45, len = short ? 0.35 : i === n - 1 ? 0.9 : 0.28;
+      const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = gainNode(90), g = ctx.createGain();
+      o.frequency.value = 2900; lfo.frequency.value = 38; lfo.connect(lg).connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.18, st + 0.02); g.gain.setValueAtTime(0.18, st + len - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, st + len);
+      o.connect(g).connect(master); o.start(st); lfo.start(st); o.stop(st + len); lfo.stop(st + len);
+    }
+  }
 
   for (const c of cues) {
     const t = Math.max(0, c.t);
+    const S = name => samples[name];
     if (c.type === 'crowd') {
-      const s = src(t, c.dur), f = bp(700, 0.5), g = ctx.createGain();
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.16 * c.level, t + 0.4);
-      g.gain.setValueAtTime(0.16 * c.level, t + c.dur - 0.4); g.gain.linearRampToValueAtTime(0, t + c.dur);
-      s.connect(f).connect(g).connect(master);
-    } else if (c.type === 'roar' || c.type === 'ooh') {
-      const big = c.type === 'roar', dur = big ? 6 : 2.4;
-      for (const [freq, lvl] of [[450, 1], [1100, 0.7], [2400, 0.35]]) {
-        const s = src(t, dur), f = bp(freq, 0.8), g = ctx.createGain();
-        const peak = (big ? 0.75 : 0.32) * lvl;
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + (big ? 0.35 : 0.5));
-        g.gain.exponentialRampToValueAtTime(peak * 0.5, t + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        s.connect(f).connect(g).connect(master);
+      const curve = Array.from(c.values, v => v * 0.2);
+      if (S('crowd')) {
+        const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = S('crowd'); s.loop = true;
+        g.gain.setValueCurveAtTime(Float32Array.from(curve, v => v * 3), t, c.dur); s.connect(g).connect(master); s.start(t, Math.random() * Math.max(0, S('crowd').duration - 1)); s.stop(t + c.dur);
+      } else {
+        // Two layers of crowd murmur with a slow swell, following the danger curve.
+        for (const [f, q, lvl] of [[420, 0.6, 1], [1300, 0.9, 0.45]]) {
+          const s = src(t, c.dur), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = gainNode(0.25);
+          lfo.frequency.value = 0.15 + Math.random() * 0.2; lfo.connect(lg).connect(g.gain);
+          g.gain.setValueCurveAtTime(Float32Array.from(curve, v => v * lvl), t, c.dur);
+          s.connect(filt('bandpass', f, q)).connect(g).connect(master); lfo.start(t); lfo.stop(t + c.dur);
+        }
       }
+    } else if (c.type === 'cheer') {
+      if (S('cheer')) playSample(S('cheer'), t, 1, 6.5);
+      else {
+        voices(t, 5.5, 'ah', 1.1, 26, 170, 420, 1.12);
+        voices(t + 0.1, 5, 'oh', 0.7, 18, 100, 190, 1.05);
+        const s = src(t, 5.5), g = ctx.createGain(); env(g, t, 0.3, 0.55, 1.5, 3.5); s.connect(filt('bandpass', 900, 0.5)).connect(g).connect(master);
+      }
+    } else if (c.type === 'ooh') {
+      if (S('ooh')) playSample(S('ooh'), t, c.level, 3);
+      else voices(t, 2.2, 'oo', 0.75 * c.level, 22, 130, 300, 0.85);
+    } else if (c.type === 'boo') {
+      if (S('boo')) playSample(S('boo'), t, c.level, 3.5);
+      else voices(t, 3.2, 'oo', 0.8 * c.level, 24, 85, 150, 0.97);
+    } else if (c.type === 'applause') {
+      if (S('applause')) playSample(S('applause'), t, c.level, c.dur);
+      else applause(t, c.dur, c.level);
+    } else if (c.type === 'refTalk') {
+      if (S('ref-talk')) playSample(S('ref-talk'), t, 1, c.dur + 1);
+      else refTalk(t, c.dur);
+    } else if (c.type === 'whistle') {
+      if (S('whistle')) { for (let i = 0; i < c.n; i++) playSample(S('whistle'), t + i * 0.45, 0.8); }
+      else whistle(t, c.n, c.short);
+    } else if (c.type === 'thud') {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.25);
+      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g).connect(master); o.start(t); o.stop(t + 0.32);
     } else if (c.type === 'whoosh') {
       const s = src(t, 0.7), f = ctx.createBiquadFilter(), g = ctx.createGain();
       f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(4000, t + 0.55);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
       s.connect(f).connect(g).connect(master);
     } else if (c.type === 'boom') {
       const o = ctx.createOscillator(), g = ctx.createGain();
@@ -849,15 +1156,6 @@ async function renderAudio(cues, duration) {
       f.type = 'highpass'; f.frequency.setValueAtTime(200, t); f.frequency.exponentialRampToValueAtTime(6000, t + 1.3);
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
       s.connect(f).connect(g).connect(master);
-    } else if (c.type === 'whistle') {
-      for (let i = 0; i < c.n; i++) {
-        const st = t + i * 0.45, len = i === c.n - 1 ? 0.9 : 0.28;
-        const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), g = ctx.createGain();
-        o.frequency.value = 2900; lfo.frequency.value = 38; lg.gain.value = 90;
-        lfo.connect(lg).connect(o.frequency);
-        g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.16, st + 0.03); g.gain.setValueAtTime(0.16, st + len - 0.05); g.gain.exponentialRampToValueAtTime(0.0001, st + len);
-        o.connect(g).connect(master); o.start(st); lfo.start(st); o.stop(st + len); lfo.stop(st + len);
-      }
     }
   }
   return ctx.startRendering();
@@ -937,7 +1235,16 @@ export async function loadAssets(teams) {
   }));
   const [league, title] = await Promise.all([loadImg('assets/league/logo.png'), loadImg('assets/league/title.jpg')]);
   await Promise.all(['700', '800', '900'].map(w => document.fonts.load(`${w} 40px Inter`).catch(() => {})));
-  return { logos, logosAlt, league, title };
+  // Optional real sound files; any that are missing fall back to generated sound.
+  const audio = {};
+  let list = null;
+  try { const r = await fetch('assets/audio/sounds.json', { cache: 'no-store' }); if (r.ok) list = await r.json(); } catch { /* none */ }
+  await Promise.all(AUDIO_FILES.map(async name => {
+    const file = list?.[name];
+    if (!file) return;
+    try { const r = await fetch(`assets/audio/${file}`); if (r.ok) audio[name] = await r.arrayBuffer(); } catch { /* skip */ }
+  }));
+  return { logos, logosAlt, league, title, audio };
 }
 
 // Renders and encodes the video. `fileHandle` (optional) streams straight to disk.
@@ -948,7 +1255,7 @@ export async function exportVideo(renderer, { fileHandle, onProgress, onPreview,
   if (!(await VideoEncoder.isConfigSupported(vcfg)).supported) throw new Error("This browser can't encode H.264 video. Use Chrome or Edge.");
 
   onProgress?.('Preparing audio…', 0);
-  const audio = await renderAudio(renderer.audioCues(), renderer.duration);
+  const audio = await renderAudio(renderer.audioCues(), renderer.duration, renderer.A.audio || {});
   let acfg = null, audioCodec = null;
   if (typeof AudioEncoder !== 'undefined') {
     for (const [codec, mux] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
