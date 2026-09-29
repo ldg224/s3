@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Heineken C League S3</title>
+  <meta name="description" content="Fixtures, results and the ladder for Heineken C League Season 3.">
+  <meta name="theme-color" content="#0f1115">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+  <script type="module" src="js/home.js"></script>
+</head>
+<body>
+  <div class="grid-bg" aria-hidden="true"></div>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div id="preview-banner" class="banner" hidden>
+    Preview: this page is showing sample data until Season 3 fixtures are confirmed.
+  </div>
+
+  <div class="app">
+    <header class="site-header">
+      <div>
+        <p class="eyebrow" id="season-label">Season 3</p>
+        <h1>Heineken C League</h1>
+      </div>
+      <nav aria-label="Sections">
+        <a href="#fixtures">Fixtures</a>
+        <a href="#ladder">Ladder</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <div id="load-error" class="card error" role="alert" hidden>
+        <strong>We couldn't load the latest league data.</strong>
+        <p id="load-error-detail" class="muted"></p>
+        <button type="button" onclick="location.reload()">Try again</button>
+      </div>
+
+      <section class="card" id="next-match" aria-live="polite">
+        <p class="muted">Loading next match…</p>
+      </section>
+
+      <section class="card" id="fixtures" aria-labelledby="fixtures-heading">
+        <h2 id="fixtures-heading">Fixtures &amp; results</h2>
+        <div id="week-tabs" class="week-tabs" role="tablist" aria-label="Week"></div>
+        <div id="fixtures-list" role="tabpanel">
+          <p class="muted">Loading fixtures…</p>
+        </div>
+      </section>
+
+      <section class="card" id="ladder" aria-labelledby="ladder-heading">
+        <h2 id="ladder-heading">Ladder</h2>
+        <div class="table-wrap">
+          <table class="ladder">
+            <thead>
+              <tr>
+                <th scope="col" class="rank"><abbr title="Position">#</abbr></th>
+                <th scope="col" class="ladder-team">Team</th>
+                <th scope="col"><abbr title="Played">P</abbr></th>
+                <th scope="col" class="wide"><abbr title="Won">W</abbr></th>
+                <th scope="col" class="wide"><abbr title="Drawn">D</abbr></th>
+                <th scope="col" class="wide"><abbr title="Lost">L</abbr></th>
+                <th scope="col" class="wide"><abbr title="Goals for">GF</abbr></th>
+                <th scope="col" class="wide"><abbr title="Goals against">GA</abbr></th>
+                <th scope="col"><abbr title="Goal difference">GD</abbr></th>
+                <th scope="col" class="pts"><abbr title="Points">Pts</abbr></th>
+                <th scope="col" class="form wide">Form</th>
+              </tr>
+            </thead>
+            <tbody id="ladder-body">
+              <tr><td colspan="11" class="muted">Loading ladder…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>Heineken C League · Season 3</span>
+      <span id="updated"></span>
+    </footer>
+  </div>
+</body>
+</html>
