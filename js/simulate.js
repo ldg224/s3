@@ -48,11 +48,11 @@ function checkSquad(season, code) {
   return { team, squad };
 }
 
-// A team's manager file (data/teams/<CODE>.json, written by the manager portal): formation, tactics,
+// A team's manager file (data/teams/<code>.json in lower case, written by the manager portal): formation, tactics,
 // chosen XI and set-piece takers. Missing or unreadable means engine defaults.
 async function managerFile(code) {
   try {
-    const res = await fetch(new URL(`../data/teams/${code}.json?t=${Date.now()}`, import.meta.url), { cache: 'no-store' });
+    const res = await fetch(new URL(`../data/teams/${code.toLowerCase()}.json?t=${Date.now()}`, import.meta.url), { cache: 'no-store' });
     return res.ok ? await res.json() : {};
   } catch { return {}; }
 }
