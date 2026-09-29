@@ -8,6 +8,8 @@
 // so summariseMatch(data) works on it. The same fixture id always gives the same match unless a `seed`
 // is passed. The engine (Pyodide, about 10 MB, cached by the browser) loads on the first call only.
 
+import { suspensions } from './league.js';
+
 const POSITIONS = ['GK', 'DEF', 'MID', 'FWD'];
 let worker = null, readyPromise = null, jobSeq = 0;
 const pending = new Map();
@@ -47,12 +49,15 @@ function checkSquad(season, code) {
 }
 
 // The engine's league format, built only from the season's own teams and players.
-function toLeague(season, codes) {
+// Suspended players (`out`) are left out, so a team can play short-handed.
+function toLeague(season, codes, out = new Set()) {
   const teams = {}, players = {};
   for (const code of codes) {
     const { team, squad } = checkSquad(season, code);
+    const available = squad.filter(p => !out.has(String(p.id)));
+    if (available.length < 7) throw new Error(`${team.name} has only ${available.length} players available after suspensions; at least 7 are needed.`);
     teams[code] = { code, name: team.name, manager: team.manager || '', colour: team.colour || '#888888' };
-    for (const p of squad) {
+    for (const p of available) {
       players[p.id] = {
         id: String(p.id), name: p.name, team: code, position: (p.position || 'MID').toUpperCase(),
         offense: Number(p.offense) || 5, defense: Number(p.defense) || 5,
@@ -65,7 +70,9 @@ function toLeague(season, codes) {
 export async function simulateFixture(season, fixture, { onProgress, seed } = {}) {
   if (!fixture?.home || !fixture?.away) throw new Error('The fixture needs a home and an away team.');
   if (fixture.home === fixture.away) throw new Error('A team can\'t play itself.');
-  const league = toLeague(season, [fixture.home, fixture.away]);   // validates squads before loading anything
+  // Suspended players miss the match (red cards, second yellows and manual bans).
+  const suspended = (suspensions(season).get(fixture.id) || []).map(s => ({ player: String(s.player), reason: s.reason }));
+  const league = toLeague(season, [fixture.home, fixture.away], new Set(suspended.map(s => s.player)));   // validates squads before loading anything
   await start();
   const job = ++jobSeq;
   return new Promise((resolve, reject) => {
@@ -73,7 +80,10 @@ export async function simulateFixture(season, fixture, { onProgress, seed } = {}
     worker.postMessage({
       job, league: JSON.stringify(league), home: fixture.home, away: fixture.away,
       seed: seed ?? null,
-      info: { fixture_id: fixture.id || null, week: fixture.week ?? null, date: fixture.date || null, time: fixture.time || null },
+      info: {
+        fixture_id: fixture.id || null, week: fixture.week ?? null, date: fixture.date || null, time: fixture.time || null,
+        stage: fixture.stage || null, suspended,
+      },
     });
   });
 }

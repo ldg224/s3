@@ -95,3 +95,14 @@
 .form-item .res { margin-left: auto; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-weight: 900; font-size: .72rem; }
 .res.W { background: #10b981; } .res.L { background: #ef4444; } .res.D { background: #4b5563; }
 @media (max-width: 767px) { .two { grid-template-columns: 1fr; } }
+
+/* Finals and suspensions */
+.sb-pens { font-size: .74rem; font-weight: 800; color: var(--gold-solid); text-align: center; }
+.pens-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.pens-row > b:first-child { width: 42px; }
+.pens-row > b:last-child { margin-left: auto; font-size: 1.1rem; }
+.pens { display: flex; gap: 5px; flex-wrap: wrap; }
+.pen { font-style: normal; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .7rem; }
+.pen.in { background: rgba(52, 211, 153, .18); color: var(--final); }
+.pen.out { background: rgba(239, 68, 68, .18); color: var(--loss); }
+.susp { font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--loss); border: 1px solid rgba(239, 68, 68, .45); border-radius: 999px; padding: 0 6px; margin-left: 4px; }

@@ -246,3 +246,10 @@ button, input, select { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }
+
+/* Running the league: finals, postponements, points adjustments */
+.stage-tag { color: var(--gold-solid); font-weight: 800; letter-spacing: .02em; }
+.kick.pp { color: var(--loss); }
+.ladder .adj { color: var(--gold-solid); font-weight: 800; margin-left: 1px; }
+.ladder-notes { padding: 8px 14px 4px; font-size: .72rem; color: var(--muted); }
+.ladder-notes p { margin: 2px 0; }

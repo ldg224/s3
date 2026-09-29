@@ -1,6 +1,7 @@
 import { loadSeason, teamMap, kickoff, status, shownScore, liveSimTime, liveSpeed, clockAt, ladder, finished, teamForm, resultFor, winChance, loadMatchFile } from './data.js';
 import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onColour, matchUrl } from './ui.js';
 import { Replay } from './replay.js';
+import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
 
 let S, T, FX, H, A, replay = null, matchData = null;
 
@@ -40,7 +41,9 @@ function scoreboard() {
     <div class="sb-mid">${statusPill(st)}
       <div class="sb-score" id="sb-score">${sc ? `${sc.home}<span class="sep">:</span>${sc.away}` : '-<span class="sep">:</span>-'}</div>
       ${clock}${cd}
-      <div class="sb-meta">Week ${esc(FX.week)} · ${esc(dayLabel(k))} · ${esc(fmtTime(k))}</div>
+      ${sc && st === 'ft' && FX.result.shootout ? `<div class="sb-pens">${FX.result.shootout.home}–${FX.result.shootout.away} on penalties</div>` : ''}
+      ${st === 'postponed' && FX.postponed_reason ? `<div class="sb-meta">${esc(FX.postponed_reason)}</div>` : ''}
+      <div class="sb-meta">${FX.stage ? `<b class="stage-tag">${esc(STAGE_NAMES[FX.stage] || FX.stage)}</b>` : `Week ${esc(FX.week)}`} ·${esc(dayLabel(k))} · ${esc(fmtTime(k))}</div>
     </div>
     ${side(A)}
   </section>`;
@@ -67,6 +70,8 @@ function replayCard() {
       </div>`;
   } else if (st === 'upcoming') {
     inner = `<div class="replay-empty"><div><strong>Watch it live here from kick-off</strong>${k ? `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>` : ''}</div></div>`;
+  } else if (st === 'postponed') {
+    inner = `<div class="replay-empty"><div><strong>Match postponed</strong>${esc(FX.postponed_reason || 'A new date will be set soon.')}</div></div>`;
   } else if (st === 'awaiting') {
     inner = '<div class="replay-empty"><div><strong>Result coming soon</strong>The match file hasn’t been uploaded yet.</div></div>';
   } else {
@@ -113,8 +118,19 @@ function motmCard() {
     <span class="rating">${p.r.toFixed(1)}</span></div></section>`;
 }
 
+function shootoutCard() {
+  const so = FX.result?.shootout;
+  if (!so) return '';
+  const kicks = side => so.kicks.filter(k => k.side === side).map(k => `<i class="pen ${k.scored ? 'in' : 'out'}" title="${esc(k.name)}: ${k.scored ? 'scored' : 'missed'}">${k.scored ? '●' : '✕'}</i>`).join('');
+  return `<section class="card"><h2 class="card-title">Penalty shootout</h2>
+    <div class="pens-row"><b>${esc(H.code)}</b><span class="pens">${kicks('home')}</span><b>${so.home}</b></div>
+    <div class="pens-row"><b>${esc(A.code)}</b><span class="pens">${kicks('away')}</span><b>${so.away}</b></div></section>`;
+}
+
 function rosterCard() {
   const played = status(FX, S) === 'ft', vt = visibleTime();
+  // Suspended players: from the match file once simulated, otherwise worked out from earlier cards and bans.
+  const susp = new Map((matchData?.match?.suspended || suspensions(S).get(FX.id) || []).map(s => [String(s.player), s.reason]));
   const goalsBy = {};
   if (vt >= 0) for (const g of FX.result.goals) if (g.t <= vt && !g.own_goal) goalsBy[g.scorer] = (goalsBy[g.scorer] || 0) + 1;
   const table = code => {
@@ -122,7 +138,7 @@ function rosterCard() {
     const rows = roster(code).map(p => {
       const r = played ? FX.result.players[p.id]?.r : null;
       const rc = r == null ? '' : r >= 7.5 ? '#34d399' : r >= 6.5 ? '#fbbf24' : '#f87171';
-      return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span class="goal-dots" title="Goals">${BALL.repeat(goalsBy[p.id])}</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}">${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
+      return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span class="goal-dots" title="Goals">${BALL.repeat(goalsBy[p.id])}</span>` : ''}${susp.has(String(p.id)) ? ` <span class="susp" title="${esc(susp.get(String(p.id)))}">Suspended</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}">${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
     }).join('');
     return `<div><div class="team-head" style="--tc:${esc(col)}"><i></i>${esc(code)} lineup</div>
       <table class="roster"><thead><tr><th>#</th><th>Name</th><th>Pos</th><th>Off</th><th>Def</th>${played ? '<th style="text-align:right">Rating</th>' : ''}</tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty">No players listed.</td></tr>'}</tbody></table></div>`;
@@ -143,16 +159,15 @@ function formCard() {
 // ---------- Page ----------
 
 function render() {
-  const st = status(FX, S);
-  const side = [st === 'ft' ? motmCard() : '', st === 'ft' ? statsCard() : winChanceCard()].join('');
+  const st = status(FX, S), known = FX.home && FX.away;
+  const side = [st === 'ft' ? shootoutCard() : '', st === 'ft' ? motmCard() : '', st === 'ft' ? statsCard() : known ? winChanceCard() : ''].join('');
   $('#mount').innerHTML = `<div class="stack">
     ${scoreboard()}
     <div class="match-layout">
       <div class="stack">${replayCard()}<div id="timeline-slot">${timelineCard()}</div></div>
       <aside class="stack">${side}</aside>
     </div>
-    <div id="roster-slot">${rosterCard()}</div>
-    ${formCard()}
+    ${known ? `<div id="roster-slot">${rosterCard()}</div>${formCard()}` : ''}
   </div>`;
   document.title = `${H.code} v ${A.code} | HCL S3`;
   if (st === 'live' || st === 'ft') startReplay(st);
@@ -216,7 +231,7 @@ function tick() {
     $('#sb-score').innerHTML = `${sc.home}<span class="sep">:</span>${sc.away}`;
     const c = $('#sb-clock'); if (c) c.textContent = clockAt(FX.result.periods, liveSimTime(FX, S));
     const n = [...FX.result.goals, ...(FX.result.cards || [])].filter(e => e.t <= liveSimTime(FX, S)).length;
-    if (n !== tick.events) { tick.events = n; $('#timeline-slot').innerHTML = timelineCard(); $('#roster-slot').innerHTML = rosterCard(); }
+    if (n !== tick.events) { tick.events = n; $('#timeline-slot').innerHTML = timelineCard(); const rs = $('#roster-slot'); if (rs) rs.innerHTML = rosterCard(); }
   }
 }
 
@@ -225,12 +240,12 @@ async function init() {
   T = teamMap(S);
   FX = findFixture();
   if (!FX) { $('#mount').innerHTML = '<div class="card empty">Match not found. Please pick a match from the schedule.</div>'; return; }
-  H = T[FX.home] || { code: FX.home, name: FX.home };
-  A = T[FX.away] || { code: FX.away, name: FX.away };
+  H = sideTeam(S, FX, 'home', T);
+  A = sideTeam(S, FX, 'away', T);
   tick.last = status(FX, S);
   render();
   setInterval(tick, 1000);
-  window.addEventListener('season-changed', e => { S = e.detail; T = teamMap(S); FX = findFixture() || FX; matchData = null; render(); });
+  window.addEventListener('season-changed', e => { S = e.detail; T = teamMap(S); FX = findFixture() || FX; H = sideTeam(S, FX, 'home', T); A = sideTeam(S, FX, 'away', T); matchData = null; render(); });
 }
 
 init();

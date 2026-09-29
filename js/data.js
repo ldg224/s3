@@ -84,8 +84,11 @@ export const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() &
 
 export function ladder(s, fixtures = finished(s)) {
   const pts = s.points || { win: 3, draw: 1, loss: 0 };
-  const rows = Object.fromEntries(s.teams.map(t => [t.code, { team: t, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [] }]));
+  const rows = Object.fromEntries(s.teams.map(t => [t.code, { team: t, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, adj: 0, form: [] }]));
+  // Point adjustments (deductions or awards) count from the start; finals don't count at all.
+  for (const a of s.adjustments || []) if (rows[a.team]) { rows[a.team].adj += a.points; rows[a.team].pts += a.points; }
   for (const f of fixtures) {
+    if (f.stage) continue;
     const h = rows[f.home], a = rows[f.away];
     if (!h || !a) continue;
     const hs = f.result.home, as = f.result.away;

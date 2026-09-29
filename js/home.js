@@ -1,5 +1,6 @@
 import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, ladderWithMovement, playerTotals, liveSimTime, clockAt } from './data.js';
 import { $, esc, logo, fmtDate, fmtTime, dayLabel, countdown, safeColour, matchUrl } from './ui.js';
+import { STAGE_NAMES, sideTeam } from './league.js';
 
 let S, T;
 
@@ -7,16 +8,20 @@ const NOTE = { awaiting: 'Result pending', tba: 'TBC', postponed: 'Postponed' };
 
 // One row per fixture. Every match appears exactly once on the page, in its week.
 function matchRow(fx) {
-  const h = T[fx.home] || { code: fx.home, name: fx.home }, a = T[fx.away] || { code: fx.away, name: fx.away };
+  const h = sideTeam(S, fx, 'home', T), a = sideTeam(S, fx, 'away', T);
   const st = status(fx, S), k = kickoff(fx), sc = shownScore(fx, S);
   let main, note = NOTE[st] || '';
   if (sc) {
     main = `<span class="score">${sc.home}<i>–</i>${sc.away}</span>`;
     note = st === 'live' ? `<span class="live-note"><span class="pulse"></span>${esc(clockAt(fx.result.periods, liveSimTime(fx, S)))}</span>` : 'Full time';
   } else {
-    main = `<span class="kick">${esc(fmtTime(k))}</span>`;
+    main = st === 'postponed' ? '<span class="kick pp">P–P</span>' : `<span class="kick">${esc(fmtTime(k))}</span>`;
+    if (st === 'postponed' && fx.postponed_reason) note = `Postponed: ${esc(fx.postponed_reason)}`;
     if (st === 'upcoming' && k && k - new Date() < 86400000) note = `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>`;
   }
+  const so = st === 'ft' ? fx.result.shootout : null;
+  if (so) note = `${note} · Pens ${so.home}–${so.away}`;
+  if (fx.stage) note = `<b class="stage-tag">${esc(STAGE_NAMES[fx.stage] || fx.stage)}</b>${note ? ' · ' + note : ''}`;
   const team = (t, side) => {
     const name = `<span class="m-name"><b class="code">${esc(t.code)}</b><b class="full">${esc(t.name)}</b></span>`;
     return `<span class="m-team ${side}">${side === 'home' ? name + logo(t, 32) : logo(t, 32) + name}</span>`;
@@ -45,7 +50,7 @@ function renderHero() {
   const fx = [...S.fixtures].sort(byKickoff);
   const live = fx.filter(f => status(f, S) === 'live');
   const next = fx.find(f => status(f, S) === 'upcoming');
-  const name = f => `${T[f.home]?.name || f.home} v ${T[f.away]?.name || f.away}`;
+  const name = f => `${sideTeam(S, f, 'home', T).name} v ${sideTeam(S, f, 'away', T).name}`;
   let text;
   if (live.length) text = `<span class="pulse" style="color:var(--live)"></span> ${live.length === 1 ? `Live now: ${esc(name(live[0]))}` : `${live.length} matches live now`}`;
   else if (next) text = `Next match: ${esc(name(next))}, ${esc(dayLabel(kickoff(next)))} at ${esc(fmtTime(kickoff(next)))}`;
@@ -73,14 +78,22 @@ function renderLadder() {
   const rows = ladderWithMovement(S);
   const played = S.fixtures.filter(f => status(f, S) === 'ft').length;
   $('#games-played').textContent = played ? `${played} played` : '';
+  const cut = S.finals?.teams || 4;
   $('#ladder-body').innerHTML = rows.map(r => {
     const mv = r.move > 0 ? `<small class="up">▲${r.move}</small>` : r.move < 0 ? `<small class="down">▼${-r.move}</small>` : '';
-    return `<tr class="${r.rank === 4 && rows.length > 4 ? 'cut' : ''}" style="--tc:${esc(safeColour(r.team.colour))}">
+    const adj = r.adj ? `<sup class="adj" title="${r.adj > 0 ? '+' : ''}${r.adj} pts adjustment">*</sup>` : '';
+    return `<tr class="${r.rank === cut && rows.length > cut ? 'cut' : ''}" style="--tc:${esc(safeColour(r.team.colour))}">
       <td class="pos">${r.rank}${mv}</td>
       <td class="t"><div>${logo(r.team, 28)}<span style="min-width:0"><b>${esc(r.team.code)}</b><small>${esc(r.team.name)}</small></span></div></td>
-      <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="pts">${r.pts}</td>
+      <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="pts">${r.pts}${adj}</td>
       <td class="form"><div class="form-dots">${r.form.map(o => `<i class="${o}">${o}</i>`).join('') || '<span class="muted">–</span>'}</div></td></tr>`;
   }).join('');
+  // Footnote listing each points adjustment, under the table.
+  const table = $('#ladder-body').closest('table');
+  let notes = $('#ladder-notes');
+  if (!notes) { notes = document.createElement('div'); notes.id = 'ladder-notes'; notes.className = 'ladder-notes'; table.after(notes); }
+  notes.innerHTML = (S.adjustments || []).map(a => `<p>* ${esc(T[a.team]?.name || a.team)}: ${a.points > 0 ? '+' : ''}${a.points} pt${Math.abs(a.points) === 1 ? '' : 's'}${a.reason ? ` (${esc(a.reason)})` : ''}</p>`).join('');
+  notes.hidden = !notes.innerHTML;
 }
 
 function renderScorers() {
