@@ -91,6 +91,7 @@ function pendingCount() {
 const strip = s => ({ ...s, updated: null });
 
 function updateToggle() {
+  if (!toggle) return;
   const n = pendingCount();
   toggle.classList.toggle('on', !!token);
   const dot = { saving: '⏳', live: '✓', failed: '⚠' }[liveState] || '';
@@ -171,19 +172,18 @@ async function startEditing() {
 
 function openPanel() {
   if (!panel) {
-    panel = el(`<aside class="ed-panel" aria-label="League editor">
-      <div class="ed-head"><h2>League editor</h2><span class="ed-pending"></span>
+    panel = el(`<section class="ed-panel full" aria-label="League editor">
+      <div class="ed-head"><h2>League admin</h2><span class="ed-pending"></span>
         <button class="ed-btn primary" data-publish>Publish now</button><button class="ed-btn" data-discard>Discard</button>
-        <button class="ed-btn" data-lock title="Lock edit mode">Lock</button><button class="ed-btn" data-close aria-label="Close">✕</button></div>
-      <div class="ed-tabs" role="tablist"></div>
-      <div class="ed-body"></div></aside>`);
-    document.body.appendChild(panel);
-    panel.querySelector('[data-close]').onclick = () => panel.classList.remove('open');
+        <a class="ed-btn" href="index.html" target="_blank" rel="noopener">View site ↗</a>
+        <button class="ed-btn" data-lock title="Lock edit mode">Lock</button></div>
+      <nav class="ed-tabs" role="tablist" aria-label="Admin sections"></nav>
+      <div class="ed-body"></div></section>`);
+    root().replaceChildren(panel);
     panel.querySelector('[data-lock]').onclick = lock;
     panel.querySelector('[data-discard]').onclick = () => { if (confirm('Discard all unpublished changes?')) { draft = structuredClone(base); uploads.clear(); refresh(); } };
     panel.querySelector('[data-publish]').onclick = () => { autoBlocked = false; publish(); };
   }
-  requestAnimationFrame(() => panel.classList.add('open'));
   refresh();
 }
 
@@ -191,9 +191,24 @@ function lock() {
   if (pendingCount() && !confirm('Some changes haven’t been published yet. Lock anyway? They will be lost.')) return;
   token = null;
   try { sessionStorage.removeItem(SESSION); } catch { /* storage unavailable */ }
-  panel?.classList.remove('open');
+  panel = null;
   draft = base = null; uploads.clear();
-  updateToggle();
+  showLocked();
+}
+
+// ---------- Admin page ----------
+
+const root = () => document.getElementById('admin-root');
+
+function showLocked() {
+  root().innerHTML = `<section class="card admin-locked">
+    <img src="assets/league/logo.png" alt="" width="64" height="64" onerror="this.remove()">
+    <h1>League admin</h1>
+    <p>${hasDevice() ? 'Enter your PIN to manage the league.' : 'Set up this device to manage the league. You only do this once per device.'}</p>
+    <button class="ed-btn primary" id="unlock">${hasDevice() ? 'Unlock' : 'Set up this device'}</button>
+    <p class="ed-hint">Managers: your login is in the <a href="manager.html">Manager Hub</a>.</p></section>`;
+  root().querySelector('#unlock').onclick = openUnlock;
+  openUnlock();
 }
 
 function refresh() {
@@ -1052,11 +1067,9 @@ async function watchLive(stamp) {
 // ---------- Boot ----------
 
 function boot() {
-  toggle = el('<button class="edit-toggle" type="button" aria-label="League edit mode"></button>');
-  (document.querySelector('.site-footer') || document.body).appendChild(toggle);
+  if (!root()) return;   // edit mode only runs on admin.html
   try { token = sessionStorage.getItem(SESSION); } catch { token = null; }
-  updateToggle();
-  toggle.onclick = () => (token ? startEditing() : openUnlock());
+  if (token) startEditing(); else showLocked();
   window.addEventListener('beforeunload', e => { if (pendingCount() || publishing) { e.preventDefault(); e.returnValue = ''; } });
 }
 boot();
