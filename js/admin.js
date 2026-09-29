@@ -8,6 +8,7 @@
 import { REPO, BRANCH, SEASON_FILE, MATCH_DIR } from './config.js';
 import { loadSeason, setSeason, summariseMatch, parseMatchBlob, localFiles, kickoff, loadMatchFile } from './data.js';
 import { esc, safeColour } from './ui.js';
+import { loginHash, newSalt } from './managers.js';
 
 const STORE = 'hcl-s3-admin';
 const SESSION = 'hcl-s3-admin-token';
@@ -199,7 +200,7 @@ function refresh() {
   const n = pendingCount();
   showState();
   panel.querySelector('[data-publish]').disabled = !n || publishing;
-  const tabs = [['fixtures', 'Fixtures'], ['generate', 'Generate'], ['upload', 'Upload match'], ['teams', 'Teams'], ['players', 'Players'], ['history', 'History'], ['settings', 'Settings']];
+  const tabs = [['fixtures', 'Fixtures'], ['generate', 'Generate'], ['upload', 'Upload match'], ['teams', 'Teams'], ['players', 'Players'], ['league', 'League'], ['history', 'History'], ['settings', 'Settings']];
   const tb = panel.querySelector('.ed-tabs');
   tb.innerHTML = tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
   tb.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; refresh(); } };
@@ -208,7 +209,7 @@ function refresh() {
   body.onchange = null;
   body.onclick = null;
   body.oninput = null;
-  ({ fixtures: fixturesTab, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, history: historyTab, settings: settingsTab })[tab](body);
+  ({ fixtures: fixturesTab, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, league: leagueTabHost, history: historyTab, settings: settingsTab })[tab](body);
   updateToggle();
   // Show edits on the page immediately (only when something actually changed).
   const sig = JSON.stringify(draft) + uploads.size;
@@ -266,7 +267,7 @@ function fixturesTab(body) {
   body.querySelector('tbody').addEventListener('click', e => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const f = draft.fixtures.find(x => x.id === b.closest('tr').dataset.id);
-    if (b.dataset.act === 'delete' && confirm(`Delete ${f.home} v ${f.away} (week ${f.week})?`)) {
+    if (b.dataset.act === 'delete' && confirm(`Delete ${f.home || 'TBC'} v ${f.away || 'TBC'} (week ${f.week})?`)) {
       if (f.file) uploads.delete(f.file);
       draft.fixtures = draft.fixtures.filter(x => x !== f);
       refresh();
@@ -478,6 +479,7 @@ async function attachMatch(f, d) {
   ensureTeams(d);
   f.file = `${MATCH_DIR}/${f.id}.json.gz`;
   f.result = summariseMatch(d);
+  try { (await import('./league.js')).applyKnockoutRules?.(draft, f, d); } catch { /* league rules not installed */ }
   const gz = await new Response(new Blob([JSON.stringify(d)]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
   uploads.set(f.file, gz);
   localFiles.set(f.file, gz);
@@ -486,7 +488,7 @@ async function attachMatch(f, d) {
 // ---------- Simulate ----------
 // Runs the HCL match simulator in this browser (js/simulate.js) and attaches the result.
 
-const unplayed = () => draft.fixtures.filter(f => !f.result).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
+const unplayed = () => draft.fixtures.filter(f => !f.result && f.home && f.away).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
 let holdAuto = false;   // pause auto-publish during a batch, then publish once
 
 async function simulateMany(list) {
@@ -503,7 +505,7 @@ async function simulateMany(list) {
     const sim = await import('./simulate.js').catch(() => { throw new Error('The simulator isn’t installed on the site yet.'); });
     for (const f of list) {
       if (cancelled) break;
-      what.textContent = `${f.home} v ${f.away} · Week ${f.week ?? '?'}${list.length > 1 ? ` (${done + 1} of ${list.length})` : ''}`;
+      what.textContent = `${f.home || 'TBC'} v ${f.away || 'TBC'} · Week ${f.week ?? '?'}${list.length > 1 ? ` (${done + 1} of ${list.length})` : ''}`;
       let data;
       try {
         // A fresh seed each time, so simulating a fixture again gives a new result.
@@ -513,7 +515,7 @@ async function simulateMany(list) {
         } });
       } catch (e) {
         if (list.length === 1) throw e;
-        skipped.push(`${f.home} v ${f.away}: ${e.message}`);   // keep going with the rest
+        skipped.push(`${f.home || 'TBC'} v ${f.away || 'TBC'}: ${e.message}`);   // keep going with the rest
         continue;
       }
       await attachMatch(f, data);
@@ -621,6 +623,18 @@ function generateTab(body) {
     refresh();
   };
   preview();
+}
+
+// ---------- League (finals, suspensions, adjustments, rescheduling): js/admin-league.js ----------
+
+let leagueMod;
+function leagueTabHost(body) {
+  const ctx = { get draft() { return draft; }, refresh, esc, teamOpts };
+  if (leagueMod) return leagueMod.leagueTab(body, ctx);
+  body.innerHTML = '<div class="ed-section"><p class="ed-hint">Loading…</p></div>';
+  import('./admin-league.js')
+    .then(m => { leagueMod = m; if (tab === 'league') refresh(); })
+    .catch(() => { body.innerHTML = '<div class="ed-section"><h3>League</h3><p class="ed-hint">Finals, suspensions, points adjustments and rescheduling are coming soon.</p></div>'; });
 }
 
 // ---------- Players ----------
@@ -765,7 +779,9 @@ function describeChanges(a, b, files) {
   diff('fixtures', f => f.id, 'fixture');
   diff('teams', t => t.code, 'team');
   diff('players', pl => pl.id, 'player');
-  if (['season', 'live_minutes', 'notice', 'points'].some(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]))) parts.push('settings changed');
+  if (['season', 'live_minutes', 'notice', 'points', 'manager_relay'].some(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]))) parts.push('settings changed');
+  if (JSON.stringify(a.managers || {}) !== JSON.stringify(b.managers || {})) parts.push('manager logins updated');
+  if (JSON.stringify(a.press_questions || []) !== JSON.stringify(b.press_questions || [])) parts.push('press questions updated');
   const logos = files.filter(([path]) => path.startsWith('assets/')).length;
   if (logos) parts.push(`${logos} logo${logos > 1 ? 's' : ''} uploaded`);
   return parts.join(', ') || 'saved';
@@ -789,40 +805,93 @@ function ensureTeams(d) {
 
 // ---------- Teams ----------
 
+const openTeams = new Set();   // which team dropdowns are expanded
+
 function teamsTab(body) {
+  // Don't add empty fields just by looking: that would count as a change and publish.
+  const qsFor = code => (draft.press_questions || []).filter(q => q.team === code);
+  const card = (t, i) => {
+    const m = (draft.managers || {})[t.code], players = (draft.players || []).filter(p => p.team === t.code).length;
+    return `<details class="team-card" data-i="${i}" data-code="${esc(t.code)}"${openTeams.has(t.code) ? ' open' : ''}>
+      <summary><span class="sw" style="background:${esc(safeColour(t.colour))}"></span><b>${esc(t.name)}</b><span class="ed-hint">${esc(t.code)} · ${esc(t.manager || 'no manager')} · ${players} players</span>
+        <span class="login-chip ${m ? 'on' : ''}">${m ? 'Login set' : 'No login'}</span></summary>
+      <div class="team-body">
+        <div class="ed-sub"><h4>Club</h4>
+          <div class="ed-row"><label class="ed-field" style="flex:1 1 180px">Team name<input class="ed-input" data-k="name" value="${esc(t.name)}"></label>
+            <label class="ed-field" style="flex:1 1 160px">Manager<input class="ed-input" data-k="manager" value="${esc(t.manager || '')}"></label>
+            <label class="ed-field">Colour<input type="color" data-k="colour" value="${esc(safeColour(t.colour).length === 7 ? t.colour : '#475569')}"></label>
+            <label class="ed-btn small" style="align-self:end">Upload logo<input type="file" accept="image/png" data-logo="" hidden></label></div></div>
+        <div class="ed-sub"><h4>Manager login</h4>
+          <p class="ed-hint">${m ? `Set ${esc(new Date(m.set || Date.now()).toLocaleDateString('en-AU'))}. Enter a new email and PIN to change it.` : 'Give this team’s manager an email and PIN.'} They sign in at <a href="manager.html" target="_blank">the Manager Hub</a>. Only a scrambled check is stored on the site, never the email or PIN, so note them down before you send them.</p>
+          <div class="ed-row"><label class="ed-field" style="flex:1 1 200px">Manager’s email<input class="ed-input" type="email" data-login="email" placeholder="name@example.com" autocomplete="off"></label>
+            <label class="ed-field" style="width:120px">PIN<input class="ed-input" data-login="pin" inputmode="numeric" placeholder="4+ digits" autocomplete="off"></label>
+            <button class="ed-btn small primary" style="align-self:end" data-act="set-login">${m ? 'Change login' : 'Set login'}</button>
+            ${m ? '<button class="ed-btn small danger" style="align-self:end" data-act="clear-login">Remove login</button>' : ''}</div></div>
+        <div class="ed-sub"><h4>Questions for this manager</h4>
+          ${qsFor(t.code).map(q => `<div class="q-row"><span>${esc(q.q)}</span><button class="ed-btn small danger" data-act="del-q" data-q="${esc(q.id)}" aria-label="Delete question">✕</button></div>`).join('') || '<p class="ed-hint">None yet. The media also asks automatic questions after each match.</p>'}
+          <div class="ed-row"><input class="ed-input" style="flex:1 1 240px" data-newq placeholder="Ask ${esc(t.manager || 'the manager')} a question…" maxlength="300"><button class="ed-btn small" data-act="add-q">Ask</button></div></div>
+        <div class="ed-row" style="justify-content:flex-end"><button class="ed-btn small danger" data-act="remove-team">Remove ${esc(t.name)}</button></div>
+      </div></details>`;
+  };
   body.innerHTML = `<div class="ed-section"><h3>Teams</h3>
-    <p class="ed-hint">Logos are optional PNGs (square, transparent background works best).</p>
-    ${draft.teams.map((t, i) => `<div class="team-edit" data-i="${i}">
-      <input class="ed-input" value="${esc(t.code)}" disabled aria-label="Code">
-      <input class="ed-input" data-k="name" value="${esc(t.name)}" aria-label="Team name">
-      <input class="ed-input" data-k="manager" value="${esc(t.manager || '')}" placeholder="Manager" aria-label="Manager">
-      <input type="color" data-k="colour" value="${esc(safeColour(t.colour).length === 7 ? t.colour : '#475569')}" aria-label="Colour">
-      <div class="ed-row" style="flex-wrap:nowrap"><label class="ed-btn small">Logo<input type="file" accept="image/png" data-logo="" hidden></label>
-        <button class="ed-btn small danger" data-remove-team title="Remove ${esc(t.name)}">Remove</button></div></div>`).join('') || '<p class="ed-hint">No teams yet.</p>'}
-    <h3 style="margin-top:8px">Add a team</h3>
-    <div class="team-edit"><input class="ed-input" id="nt-code" maxlength="4" placeholder="CODE"><input class="ed-input" id="nt-name" placeholder="Team name">
-      <input class="ed-input" id="nt-man" placeholder="Manager"><input type="color" id="nt-col" value="#34d399"><button class="ed-btn small primary" id="nt-add">+ Add</button></div></div>`;
+    <p class="ed-hint">Open a team to edit it. Logos are optional PNGs (square, transparent background works best).</p>
+    <div class="team-cards">${draft.teams.map(card).join('') || '<p class="ed-hint">No teams yet.</p>'}</div>
+    <details class="team-card"${openTeams.has('__new') ? ' open' : ''} data-code="__new"><summary><b>+ Add a team</b></summary><div class="team-body">
+      <div class="ed-row"><label class="ed-field" style="width:90px">Code<input class="ed-input" id="nt-code" maxlength="4" placeholder="ABC"></label>
+        <label class="ed-field" style="flex:1 1 160px">Team name<input class="ed-input" id="nt-name"></label>
+        <label class="ed-field" style="flex:1 1 140px">Manager<input class="ed-input" id="nt-man"></label>
+        <label class="ed-field">Colour<input type="color" id="nt-col" value="#34d399"></label>
+        <button class="ed-btn small primary" style="align-self:end" id="nt-add">Add team</button></div></div></details></div>
+    <div class="ed-section"><h3>Ask every manager</h3>
+      ${qsFor('all').map(q => `<div class="q-row"><span>${esc(q.q)}</span><button class="ed-btn small danger" data-act="del-q" data-q="${esc(q.id)}" aria-label="Delete question">✕</button></div>`).join('')}
+      <div class="ed-row"><input class="ed-input" style="flex:1 1 240px" id="q-all" placeholder="A question for all managers…" maxlength="300"><button class="ed-btn small" data-act="add-q-all">Ask all</button></div></div>`;
+
+  body.querySelectorAll('details.team-card').forEach(d => d.addEventListener('toggle', () => { d.open ? openTeams.add(d.dataset.code) : openTeams.delete(d.dataset.code); }));
   body.onchange = e => {
-    const row = e.target.closest('.team-edit[data-i]');
-    if (!row) return;
-    const t = draft.teams[+row.dataset.i];
+    const cardEl = e.target.closest('.team-card[data-i]');
+    if (!cardEl) return;
+    const t = draft.teams[+cardEl.dataset.i];
     if (e.target.dataset.k) { t[e.target.dataset.k] = e.target.value; refresh(); }
     if (e.target.dataset.logo !== undefined && e.target.files[0]) {
       uploads.set(`assets/teams/${t.code.toLowerCase()}${e.target.dataset.logo}.png`, e.target.files[0]);
       refresh();
     }
   };
-  body.onclick = e => {
-    if (!e.target.closest('[data-remove-team]')) return;
-    const t = draft.teams[+e.target.closest('.team-edit[data-i]').dataset.i];
-    const players = (draft.players || []).filter(p => p.team === t.code).length;
-    const fixtures = draft.fixtures.filter(f => f.home === t.code || f.away === t.code).length;
-    const also = [players && `${players} player${players > 1 ? 's' : ''}`, fixtures && `${fixtures} fixture${fixtures > 1 ? 's' : ''}`].filter(Boolean);
-    if (!confirm(`Remove ${t.name}?${also.length ? ` This also removes its ${also.join(' and ')}.` : ''}`)) return;
-    draft.teams = draft.teams.filter(x => x !== t);
-    draft.players = (draft.players || []).filter(p => p.team !== t.code);
-    draft.fixtures = draft.fixtures.filter(f => f.home !== t.code && f.away !== t.code);
-    refresh();
+  body.onclick = async e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const cardEl = b.closest('.team-card[data-i]'), t = cardEl ? draft.teams[+cardEl.dataset.i] : null;
+    const act = b.dataset.act;
+    if (act === 'set-login') {
+      const email = cardEl.querySelector('[data-login="email"]').value.trim(), pin = cardEl.querySelector('[data-login="pin"]').value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) return alert('Enter the manager’s email address.');
+      if (!/^\d{4,}$/.test(pin)) return alert('Use a PIN of at least 4 digits.');
+      b.disabled = true; b.textContent = 'Saving…';
+      const salt = newSalt();
+      draft.managers = { ...(draft.managers || {}), [t.code]: { salt, hash: await loginHash(salt, email, pin), set: new Date().toISOString().slice(0, 10) } };
+      alert(`Login saved for ${t.name}.\n\nEmail: ${email}\nPIN: ${pin}\n\nSend these to the manager. They can't be viewed again.`);
+      refresh();
+    }
+    if (act === 'clear-login' && confirm(`Remove the manager login for ${t.name}? They won't be able to sign in until you set a new one.`)) { delete draft.managers[t.code]; if (!Object.keys(draft.managers).length) delete draft.managers; refresh(); }
+    if (act === 'add-q' || act === 'add-q-all') {
+      const input = act === 'add-q' ? cardEl.querySelector('[data-newq]') : body.querySelector('#q-all'), q = input.value.trim();
+      if (!q) return input.focus();
+      (draft.press_questions ||= []).push({ id: Date.now().toString(36), team: act === 'add-q' ? t.code : 'all', q, date: new Date().toISOString().slice(0, 10) });
+      refresh();
+    }
+    if (act === 'del-q') { draft.press_questions = (draft.press_questions || []).filter(q => q.id !== b.dataset.q); refresh(); }
+    if (act === 'remove-team') {
+      const players = (draft.players || []).filter(p => p.team === t.code).length;
+      const fixtures = draft.fixtures.filter(f => f.home === t.code || f.away === t.code).length;
+      const also = [players && `${players} player${players > 1 ? 's' : ''}`, fixtures && `${fixtures} fixture${fixtures > 1 ? 's' : ''}`].filter(Boolean);
+      if (!confirm(`Remove ${t.name}?${also.length ? ` This also removes its ${also.join(' and ')}.` : ''}`)) return;
+      draft.teams = draft.teams.filter(x => x !== t);
+      draft.players = (draft.players || []).filter(p => p.team !== t.code);
+      draft.fixtures = draft.fixtures.filter(f => f.home !== t.code && f.away !== t.code);
+      if (draft.managers) delete draft.managers[t.code];
+      if (draft.press_questions) draft.press_questions = draft.press_questions.filter(q => q.team !== t.code);
+      refresh();
+    }
   };
   body.querySelector('#nt-add').onclick = () => {
     const code = body.querySelector('#nt-code').value.trim().toUpperCase(), name = body.querySelector('#nt-name').value.trim();
@@ -830,6 +899,7 @@ function teamsTab(body) {
     if (draft.teams.some(t => t.code === code)) return alert('That code is already used.');
     if (!name) return alert('Enter the team name.');
     draft.teams.push({ code, name, manager: body.querySelector('#nt-man').value.trim(), colour: body.querySelector('#nt-col').value });
+    openTeams.delete('__new'); openTeams.add(code);
     refresh();
   };
 }
@@ -846,6 +916,10 @@ function settingsTab(body) {
     <div class="ed-row"><label class="ed-field" style="width:80px">Win pts<input class="ed-input" type="number" data-p="win" value="${p.win}"></label>
       <label class="ed-field" style="width:80px">Draw pts<input class="ed-input" type="number" data-p="draw" value="${p.draw}"></label>
       <label class="ed-field" style="width:80px">Loss pts<input class="ed-input" type="number" data-p="loss" value="${p.loss}"></label></div></div>
+    <div class="ed-section"><h3>Manager Hub</h3>
+      <p class="ed-hint">Managers save their tactics and press answers through a small Google script on your account, so no key is ever on the website. Follow <a href="https://github.com/${REPO}/blob/${BRANCH}/docs/MANAGER_SETUP.md" target="_blank">the 5-minute setup guide</a>, then paste the web app link here. Set each manager's login in <b>Teams</b>.</p>
+      <label class="ed-field">Manager relay link<input class="ed-input" data-k="manager_relay" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(draft.manager_relay || '')}"></label>
+      <div class="ed-row"><button class="ed-btn small" id="relay-test">Test the link</button><span class="ed-hint" id="relay-status"></span></div></div>
     <div class="ed-section"><h3>This device</h3><p class="ed-hint">The access token is stored encrypted in this browser. Forget it if this isn't your device.</p>
       <div class="ed-row"><button class="ed-btn danger" id="forget">Forget this device</button></div></div>`;
   body.onchange = e => {
@@ -853,6 +927,15 @@ function settingsTab(body) {
     if (k) draft[k] = e.target.type === 'number' ? +e.target.value : e.target.value;
     if (pk) { draft.points = { ...(draft.points || { win: 3, draw: 1, loss: 0 }), [pk]: +e.target.value }; }
     if (k || pk) refresh();
+  };
+  body.querySelector('#relay-test').onclick = async () => {
+    const out = body.querySelector('#relay-status');
+    if (!draft.manager_relay) { out.textContent = 'Paste the link first.'; return; }
+    out.textContent = 'Testing…';
+    try {
+      const r = await (await fetch(draft.manager_relay)).json();
+      out.innerHTML = r.ok ? '<span class="ed-ok">✓ The relay is working.</span>' : `<span class="ed-err">${esc(r.error || 'Unexpected reply')}</span>`;
+    } catch { out.innerHTML = '<span class="ed-err">Couldn’t reach it. Check the link, and that the deployment is set to “Anyone”.</span>'; }
   };
   body.querySelector('#forget').onclick = () => {
     if (!confirm('Remove the saved access token from this browser? You will need to set edit mode up again.')) return;

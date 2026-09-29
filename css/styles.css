@@ -89,6 +89,11 @@ button, input, select { font: inherit; color: inherit; }
   .brand .long { display: inline; }
   .nav a { padding: 8px 16px; }
 }
+@media (max-width: 479px) {
+  .brand small { display: none; }
+  .nav { gap: 0; }
+  .nav a { padding: 8px 9px; font-size: .8rem; }
+}
 
 /* ---------- Home hero ---------- */
 .hero {

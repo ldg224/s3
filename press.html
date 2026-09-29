@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Match Centre | HCL S3</title>
+  <title>Press Room | HCL S3</title>
+  <meta name="description" content="What the Heineken C League managers are saying: press conferences and team news.">
   <meta name="theme-color" content="#0f1115">
   <link rel="icon" type="image/png" href="assets/league/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="css/match.css">
+  <link rel="stylesheet" href="css/manager.css">
   <link rel="stylesheet" href="css/admin.css">
-  <script type="module" src="js/match.js"></script>
+  <script type="module" src="js/press.js"></script>
   <script type="module" src="js/admin.js"></script>
   <script type="module" src="js/updates.js"></script>
 </head>
@@ -21,15 +22,15 @@
     <div class="topbar-inner">
       <a class="brand" href="index.html"><img src="assets/league/logo.png" alt="" onerror="this.remove()"><span><b><span class="long">Heineken C League</span><span class="short">HCL</span></b><small>Season 3</small></span></a>
       <nav class="nav" aria-label="Site">
-        <a href="index.html" aria-current="page">Matches</a>
+        <a href="index.html">Matches</a>
         <a href="index.html#table">Table</a>
-        <a href="press.html">Press</a>
+        <a href="press.html" aria-current="page">Press</a>
         <a href="awards.html">Awards</a>
       </nav>
     </div>
   </header>
   <div class="app">
-    <div id="mount"><div class="card loading"><div class="spinner"></div>Loading match…</div></div>
+    <div id="mount"><div class="card loading"><div class="spinner"></div>Loading…</div></div>
     <footer class="site-footer"><span>Heineken C League · Season 3 · <a href="manager.html">Manager login</a></span></footer>
   </div>
 </body>
