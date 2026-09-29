@@ -206,6 +206,7 @@ function refresh() {
   const body = panel.querySelector('.ed-body');
   body.innerHTML = '';
   body.onchange = null;
+  body.onclick = null;
   ({ fixtures: fixturesTab, upload: uploadTab, teams: teamsTab, settings: settingsTab })[tab](body);
   updateToggle();
   // Show edits on the page immediately (only when something actually changed).
@@ -375,7 +376,8 @@ function teamsTab(body) {
       <input class="ed-input" data-k="name" value="${esc(t.name)}" aria-label="Team name">
       <input class="ed-input" data-k="manager" value="${esc(t.manager || '')}" placeholder="Manager" aria-label="Manager">
       <input type="color" data-k="colour" value="${esc(safeColour(t.colour).length === 7 ? t.colour : '#475569')}" aria-label="Colour">
-      <label class="ed-btn small">Logo<input type="file" accept="image/png" data-logo="" hidden></label></div>`).join('')}
+      <div class="ed-row" style="flex-wrap:nowrap"><label class="ed-btn small">Logo<input type="file" accept="image/png" data-logo="" hidden></label>
+        <button class="ed-btn small danger" data-remove-team title="Remove ${esc(t.name)}">Remove</button></div></div>`).join('') || '<p class="ed-hint">No teams yet.</p>'}
     <h3 style="margin-top:8px">Add a team</h3>
     <div class="team-edit"><input class="ed-input" id="nt-code" maxlength="4" placeholder="CODE"><input class="ed-input" id="nt-name" placeholder="Team name">
       <input class="ed-input" id="nt-man" placeholder="Manager"><input type="color" id="nt-col" value="#34d399"><button class="ed-btn small primary" id="nt-add">+ Add</button></div></div>`;
@@ -388,6 +390,18 @@ function teamsTab(body) {
       uploads.set(`assets/teams/${t.code.toLowerCase()}${e.target.dataset.logo}.png`, e.target.files[0]);
       refresh();
     }
+  };
+  body.onclick = e => {
+    if (!e.target.closest('[data-remove-team]')) return;
+    const t = draft.teams[+e.target.closest('.team-edit[data-i]').dataset.i];
+    const players = (draft.players || []).filter(p => p.team === t.code).length;
+    const fixtures = draft.fixtures.filter(f => f.home === t.code || f.away === t.code).length;
+    const also = [players && `${players} player${players > 1 ? 's' : ''}`, fixtures && `${fixtures} fixture${fixtures > 1 ? 's' : ''}`].filter(Boolean);
+    if (!confirm(`Remove ${t.name}?${also.length ? ` This also removes its ${also.join(' and ')}.` : ''}`)) return;
+    draft.teams = draft.teams.filter(x => x !== t);
+    draft.players = (draft.players || []).filter(p => p.team !== t.code);
+    draft.fixtures = draft.fixtures.filter(f => f.home !== t.code && f.away !== t.code);
+    refresh();
   };
   body.querySelector('#nt-add').onclick = () => {
     const code = body.querySelector('#nt-code').value.trim().toUpperCase(), name = body.querySelector('#nt-name').value.trim();
