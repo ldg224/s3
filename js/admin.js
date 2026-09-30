@@ -437,7 +437,8 @@ function fixturesTab(body) {
   const todo = unplayed().length;
   body.innerHTML = `<div class="ed-section">
     <div class="fx-top"><div><h3>Fixtures</h3><p class="ed-hint">${all.length} matches · ${count('ready') + count('done')} with results · results stay hidden until kick-off, then play out live over ${esc(draft.live_minutes || 10)} minutes.</p></div>
-      ${todo ? `<button class="ed-btn primary" id="sim-all">⚡ Simulate all ${todo} without a result</button>` : ''}</div>
+      <div class="ed-row">${todo ? `<button class="ed-btn primary" id="sim-all">⚡ Simulate all ${todo} without a result</button>` : ''}
+        ${all.length ? '<button class="ed-btn danger" id="clear-all">Clear all fixtures…</button>' : ''}</div></div>
     <div class="fx-filters">${filters.map(([k, l, n]) => `<button class="fx-filter" data-filter="${k}" aria-pressed="${fxFilter === k}">${l} <span>${n}</span></button>`).join('')}</div>
     ${weekHtml || (all.length ? '<p class="ed-hint">Nothing matches this filter.</p>'
     : `<div class="ed-empty"><b>No fixtures yet.</b><span class="ed-hint">Build a whole season in one go, or add fixtures one at a time below.</span><button class="ed-btn primary" data-go-sub="generate">Generate a season</button></div>`)}
@@ -500,6 +501,20 @@ function fixturesTab(body) {
   body.querySelector('#sim-all')?.addEventListener('click', async () => {
     const list = unplayed();
     if (await ask({ title: `Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}?`, text: 'This can take a while. Keep this tab open; each result is kept on this device as it finishes. Press Publish when it’s done to put the results live.', ok: 'Simulate' })) simulateMany(list);
+  });
+  // Clear every fixture (and the finals set-up) in one go. Undo brings them back until Publish;
+  // publishing deletes the removed matches' files, and History can restore them after that.
+  body.querySelector('#clear-all')?.addEventListener('click', async () => {
+    const n = draft.fixtures.length, played = draft.fixtures.filter(f => f.result).length;
+    if (!await ask({ title: `Clear all ${n} fixture${n === 1 ? '' : 's'}?`, danger: true, ok: 'Clear all fixtures',
+      text: `${played ? `${played} of them ${played === 1 ? 'has a result, which is' : 'have results, which are'} deleted too, with ${played === 1 ? 'its match file' : 'their match files'}, when you press Publish. ` : ''}Undo brings them back until then; after publishing, History can restore the old version.` })) return;
+    change(`${n} fixture${n === 1 ? '' : 's'} cleared.`, () => {
+      draft.fixtures = [];
+      delete draft.finals;
+      for (const k of [...uploads.keys()]) if (k.startsWith(MATCH_DIR)) uploads.delete(k);
+    });
+    fxOpenWeeks.clear(); fxEditing.clear(); fxFilter = 'all';
+    refresh();
   });
   body.querySelector('#nf-add').onclick = () => {
     const week = +body.querySelector('#nf-week').value || 1, h = body.querySelector('#nf-home').value, a = body.querySelector('#nf-away').value;
