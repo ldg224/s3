@@ -5,7 +5,7 @@
 
 import { loadSeason, teamMap, playerTotals, kickoff, status, ladder, finished, resultFor } from './data.js';
 import { $, esc, logo, safeColour, onColour, countdown, dayLabel, fmtTime, matchUrl } from './ui.js';
-import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, loadTeamFiles, findManagerTeam, relaySave, pressQuestions } from './managers.js';
+import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, loadTeamFiles, ratingColour, findManagerTeam, relaySave, pressQuestions } from './managers.js';
 import { newsPane, bannerHtml, badgeCount, tickDue } from './manager-news.js';
 import { pressMeters } from './press-view.js';
 import { pressFor, nextFixture, headingInto } from './press-panels.js';
@@ -20,8 +20,6 @@ const REMEMBER = 'hcl-manager-email', STAY = 'hcl-manager-stay';
 
 const shirt = p => String(p.id).slice(-2);
 const surname = p => p.name.split(' ').slice(-1)[0];
-// Brightest = best, in the brand's blues (the number itself carries the meaning).
-const ratingColour = r => (r >= 7.5 ? '#ffffff' : r >= 6.5 ? '#90caf9' : r > 0 ? '#42a5f5' : 'rgba(255,255,255,.12)');
 // News answers are saved straight away through their own relay action, so they never count as unsaved.
 const snapshot = f => JSON.stringify({ ...f, updated: null, news: null });
 const dirty = () => file && snapshot(file) !== saved;

@@ -439,8 +439,8 @@ export class HighlightsRenderer {
     this.text(p.name.toUpperCase(), W * 0.52 + (1 - k) * 200, 470, { size: 92, weight: 900, italic: true, alpha: k, shadow: 20 });
     this.text(team.name.toUpperCase(), W * 0.52, 530, { size: 30, weight: 800, colour: 'rgba(255,255,255,.7)', spacing: 4, alpha: k });
     const b = easeOut((t - 0.6) / 0.6);
-    this.pill(W * 0.52, 575, 200, 110, gold, 20);
-    this.text(s.rating.toFixed(1), W * 0.52 + 100, 655, { size: 72, weight: 900, align: 'center', colour: DARK, alpha: b });
+    this.pill(W * 0.52, 575, 200, 110, '#1e88e5', 20);   // Man of the Match rating: mid blue, as in real-world apps
+    this.text(s.rating.toFixed(1), W * 0.52 + 100, 655, { size: 72, weight: 900, align: 'center', colour: '#fff', alpha: b });
     const line = [s.goals && `${s.goals} goal${s.goals > 1 ? 's' : ''}`, s.assists && `${s.assists} assist${s.assists > 1 ? 's' : ''}`, `${s.passes_completed}/${s.passes} passes`, s.saves && `${s.saves} saves`, s.tackles_won && `${s.tackles_won} tackles won`].filter(Boolean).slice(0, 4).join('   ·   ');
     this.text(line, W * 0.52 + 240, 645, { size: 30, weight: 700, alpha: b });
   }

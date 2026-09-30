@@ -4,7 +4,7 @@
 
 import { kickoff, status, finished, ladder, resultFor, winChance, playerTotals, byKickoff } from './data.js';
 import { esc, logo, safeColour, onColour, fmtDate, fmtTime, matchUrl, parseStamp } from './ui.js';
-import { FORMATIONS, TACTICS, PRESETS, squadOf, normaliseTeamFile, loadTeamFile } from './managers.js';
+import { FORMATIONS, TACTICS, PRESETS, squadOf, normaliseTeamFile, loadTeamFile, ratingColour, MOTM_BLUE } from './managers.js';
 import { suspensions, isKnockout, STAGE_NAMES } from './league.js';
 
 // This module's own styles, added once to whichever page loads it (same ?v= as this file).
@@ -19,7 +19,6 @@ let scouted = null;            // team code being scouted (null = next opponent)
 
 const surname = p => (p.name || '').trim().split(/\s+/).slice(-1)[0];
 const shirt = p => String(p.id).slice(-2);
-const ratingColour = r => (!r ? 'var(--muted)' : r >= 7.5 ? '#ffffff' : r >= 6.5 ? '#90caf9' : '#42a5f5');
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const perGame = (n, g) => (g ? (n / g).toFixed(2) : '–');
 const minuteOf = m => parseInt(String(m), 10) || 0;
@@ -227,7 +226,7 @@ function report(S, f, me, T, open) {
   const ps = Object.entries(res.players || {}).map(([id, p]) => ({ id, ...p })).filter(p => p.team === me).sort((a, b) => (b.r || 0) - (a.r || 0));
   const motm = res.players?.[res.motm];
   const table = ps.length ? `<div style="overflow-x:auto"><table class="sq"><thead><tr><th>Player</th><th>Pos</th><th>Min</th><th>G</th><th>A</th><th>Sh</th><th>Pass</th><th>Tkl</th><th>Rating</th></tr></thead><tbody>
-    ${ps.map(p => `<tr><td>${esc(p.name)}${res.motm === p.id ? ' ⭐' : ''}${p.rc ? ' <i class="sc-card r"></i>' : p.yc ? ' <i class="sc-card y"></i>' : ''}</td><td>${esc(p.slot || '')}</td><td>${p.min ?? ''}</td><td>${p.g || ''}</td><td>${p.a || ''}</td><td>${p.sh || ''}</td><td>${p.pas ? `${p.pc}/${p.pas}` : ''}</td><td>${p.tk || ''}</td><td style="color:${ratingColour(p.r)};font-weight:900">${p.r != null ? p.r.toFixed(1) : '–'}</td></tr>`).join('')}
+    ${ps.map(p => `<tr><td>${esc(p.name)}${res.motm === p.id ? ' ⭐' : ''}${p.rc ? ' <i class="sc-card r"></i>' : p.yc ? ' <i class="sc-card y"></i>' : ''}</td><td>${esc(p.slot || '')}</td><td>${p.min ?? ''}</td><td>${p.g || ''}</td><td>${p.a || ''}</td><td>${p.sh || ''}</td><td>${p.pas ? `${p.pc}/${p.pas}` : ''}</td><td>${p.tk || ''}</td><td style="color:${res.motm === p.id ? MOTM_BLUE : ratingColour(p.r)};font-weight:900">${p.r != null ? p.r.toFixed(1) : '–'}</td></tr>`).join('')}
     </tbody></table></div>` : '<p class="muted">No player stats in this match file.</p>';
   const k = kickoff(f);
   return `<details class="card sc-report"${open ? ' open' : ''}>

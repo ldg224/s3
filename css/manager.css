@@ -149,7 +149,7 @@ button.prow:hover { border-color: rgba(255,255,255,.18); }
 .todo-row.ok .tick { background: #ffffff; color: var(--bg); }
 .todo-row .arrow { margin-left: auto; color: var(--muted); font-size: 1.1rem; }
 .res-dot { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: .72rem; font-weight: 900; flex: none; }
-.res-dot.W { background: #42a5f5; color: #fff; } .res-dot.D { background: #1565c0; color: #fff; } .res-dot.L { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px #64b5f6; }
+.res-dot.W { background: var(--res-w, #22a55b); color: #fff; } .res-dot.D { background: var(--res-d, #7c8594); color: #fff; } .res-dot.L { background: var(--res-l, #e5484d); color: #fff; }
 
 /* League news (js/manager-news.js; post styles are in css/news.css) */
 #pane .nw-post { scroll-margin-top: calc(130px + env(safe-area-inset-top)); }   /* clear the sticky top bar and tabs */

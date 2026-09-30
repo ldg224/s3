@@ -35,7 +35,7 @@
 .replay-wrap canvas { width: 100%; height: auto; display: block; }
 .replay-caption {
   position: absolute; left: 50%; top: 8px; transform: translateX(-50%); max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; padding: 5px 12px; border-radius: 999px;
-  background: rgba(8,18,37,.88); border: 1px solid var(--glass-border); font-weight: 800; font-size: .8rem; white-space: nowrap;
+  background: rgba(10,15,25,.88); border: 1px solid var(--glass-border); font-weight: 800; font-size: .8rem; white-space: nowrap;
   opacity: 0; transition: opacity .3s; pointer-events: none;
 }
 .replay-caption.show { opacity: 1; }
@@ -75,7 +75,7 @@
 
 /* MOTM */
 .motm { display: flex; align-items: center; gap: 14px; }
-.motm .rating { margin-left: auto; font-size: 1.6rem; font-weight: 900; padding: 4px 12px; border-radius: 12px; background: #ffffff; color: var(--bg); }
+.motm .rating { margin-left: auto; font-size: 1.6rem; font-weight: 900; padding: 4px 12px; border-radius: 12px; background: #1e88e5; color: #fff; }
 
 /* Lineup tables, form */
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -93,8 +93,8 @@
 .form-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid var(--glass-border); text-decoration: none; font-size: .82rem; font-weight: 700; transition: transform .2s; }
 .form-item:hover { transform: translateY(-3px) scale(1.01); }
 .form-item .res { margin-left: auto; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-weight: 900; font-size: .72rem; }
-/* W / D / L carry their letter: W filled Blue 400, D Blue 800, L outlined (docs/BRAND.md) */
-.res.W { background: #42a5f5; color: #fff; } .res.D { background: #1565c0; color: #fff; } .res.L { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px #64b5f6; }
+/* W / D / L: real-world colours (shared tokens in styles.css), and the letter */
+.res.W { background: var(--res-w, #22a55b); color: #fff; } .res.D { background: var(--res-d, #7c8594); color: #fff; } .res.L { background: var(--res-l, #e5484d); color: #fff; }
 @media (max-width: 767px) { .two { grid-template-columns: 1fr; } }
 
 /* Finals and suspensions */
@@ -104,8 +104,8 @@
 .pens-row > b:last-child { margin-left: auto; font-size: 1.1rem; }
 .pens { display: flex; gap: 5px; flex-wrap: wrap; }
 .pen { font-style: normal; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .7rem; }
-.pen.in { background: rgba(255,255,255,.14); color: #fff; }
-.pen.out { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); text-decoration: line-through; }
+.pen.in { background: rgba(34,165,91,.2); color: #4ade80; }
+.pen.out { background: rgba(229,72,77,.18); color: #f87171; text-decoration: line-through; }
 .susp { font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #fff; border: 1px solid rgba(255,255,255,.6); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
 /* ---------- Match player (js/match-player.js): highlights, broadcast, tactical, downloads ---------- */
 .mp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -139,8 +139,8 @@ body.mp-fs-open :has(.mp-screen.mp-fs) { transform: none !important; filter: non
 .mp-screen.mp-fs.mp-idle { cursor: none; }
 body.mp-fs-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .mp-screen.mp-fs .mp-controls { transition: none; } }
-.mp-big { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 76px; border-radius: 50%; border: 0; background: rgba(8,18,37,.72); color: #fff; font-size: 2rem; cursor: pointer; box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 10px 30px rgba(0,0,0,.5); backdrop-filter: blur(4px); }
-.mp-big:hover { background: rgba(8,18,37,.9); }
+.mp-big { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 76px; border-radius: 50%; border: 0; background: rgba(10,15,25,.72); color: #fff; font-size: 2rem; cursor: pointer; box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 10px 30px rgba(0,0,0,.5); backdrop-filter: blur(4px); }
+.mp-big:hover { background: rgba(10,15,25,.9); }
 .mp-big[hidden] { display: none; }
 .mp-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-weight: 700; background: var(--surface); }
 .mp-msg.err { color: #fff; } .mp-msg.err::before { content: "⚠ "; }

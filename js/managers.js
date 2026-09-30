@@ -12,6 +12,15 @@ import { kickoff, status, ladder, finished, playerTotals } from './data.js';
 // attacking upwards: y 0 = own goal line, 100 = opponent's. `want` = preferred position.
 const L = { GK: 9, DEF: 26, MID: 48, AM: 65, FWD: 80 };
 const slot = (line, across, adj, want) => ({ x: across / 68 * 100, y: L[line] + adj * 1.4, want });
+// Player ratings use the real-world scale (like FotMob / Sofascore), not the league's blues:
+// green is good, amber average, red poor. Works as a chip background (dark text) or as the
+// colour of the number itself. The Man of the Match gets a mid blue chip with white text.
+export const MOTM_BLUE = '#1e88e5';
+export function ratingColour(r) {
+  if (!r) return 'rgba(255,255,255,.12)';
+  return r >= 8 ? '#22c55e' : r >= 7 ? '#a3e635' : r >= 6 ? '#fbbf24' : '#f87171';
+}
+
 export const FORMATIONS = {
   '4-3-3': {
     GK: slot('GK', 34, 0, 'GK'), LB: slot('DEF', 7, 0, 'DEF'), LCB: slot('DEF', 25, -1, 'DEF'), RCB: slot('DEF', 43, -1, 'DEF'), RB: slot('DEF', 61, 0, 'DEF'),

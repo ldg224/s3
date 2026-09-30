@@ -5,7 +5,7 @@ import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
 import { viewerBadge } from './viewers.js';
 import { pressMeters } from './press-view.js';
 import { pressFor } from './press-panels.js';
-import { loadTeamFiles } from './managers.js';
+import { loadTeamFiles, ratingColour, MOTM_BLUE } from './managers.js';
 
 let S, T, FX, H, A, player = null, matchData = null, teamFiles = null;
 
@@ -137,8 +137,9 @@ function rosterCard() {
     const t = T[code] || {}, col = safeColour(t.colour);
     const rows = roster(code).map(p => {
       const r = played ? FX.result.players[p.id]?.r : null;
-      const rc = r == null ? '' : r >= 7.5 ? '#ffffff' : r >= 6.5 ? '#90caf9' : '#42a5f5';   // brightest = best (the number carries it)
-      return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span class="goal-dots" title="Goals">${BALL.repeat(goalsBy[p.id])}</span>` : ''}${susp.has(String(p.id)) ? ` <span class="susp" title="${esc(susp.get(String(p.id)))}">Suspended</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}">${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
+      const motm = String(FX.result?.motm) === String(p.id);
+      const rc = r == null ? '' : motm ? `${MOTM_BLUE};color:#fff` : ratingColour(r);
+      return `<tr><td class="num">${esc(shirt(p))}</td><td>${esc(p.name)}${goalsBy[p.id] ? ` <span class="goal-dots" title="Goals">${BALL.repeat(goalsBy[p.id])}</span>` : ''}${susp.has(String(p.id)) ? ` <span class="susp" title="${esc(susp.get(String(p.id)))}">Suspended</span>` : ''}</td><td>${esc(p.position)}</td><td class="o">${p.offense}</td><td class="d">${p.defense}</td>${played ? `<td class="r">${r != null ? `<span class="rating-chip" style="background:${rc}"${motm ? ' title="Man of the Match"' : ''}>${r.toFixed(1)}</span>` : ''}</td>` : ''}</tr>`;
     }).join('');
     return `<div><div class="team-head" style="--tc:${esc(col)};color:${esc(textColour(col))}"><i></i>${esc(code)} lineup</div>
       <table class="roster"><thead><tr><th>#</th><th>Name</th><th>Pos</th><th>Off</th><th>Def</th>${played ? '<th style="text-align:right">Rating</th>' : ''}</tr></thead><tbody>${rows || '<tr><td colspan="6" class="empty">No players listed.</td></tr>'}</tbody></table></div>`;
