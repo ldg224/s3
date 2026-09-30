@@ -2,6 +2,7 @@ import { loadSeason, teamMap, kickoff, status, shownScore, liveSimTime, liveSpee
 import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onColour, matchUrl, textColour } from './ui.js';
 import { playerCard, MatchPlayer } from './match-player.js';
 import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
+import { viewerBadge } from './viewers.js';
 
 let S, T, FX, H, A, player = null, matchData = null;
 
@@ -40,7 +41,7 @@ function scoreboard() {
     ${side(H)}
     <div class="sb-mid">${statusPill(st)}
       <div class="sb-score" id="sb-score">${sc ? `${sc.home}<span class="sep">:</span>${sc.away}` : '-<span class="sep">:</span>-'}</div>
-      ${clock}${cd}
+      ${clock}${cd}<span id="sb-viewers">${st === 'live' ? viewerBadge(window.hclViewers?.matches?.[FX.id]) : ''}</span>
       ${sc && st === 'ft' && FX.result.shootout ? `<div class="sb-pens">${FX.result.shootout.home}–${FX.result.shootout.away} on penalties</div>` : ''}
       ${st === 'postponed' && FX.postponed_reason ? `<div class="sb-meta">${esc(FX.postponed_reason)}</div>` : ''}
       <div class="sb-meta">${FX.stage ? `<b class="stage-tag">${esc(STAGE_NAMES[FX.stage] || FX.stage)}</b>` : `Week ${esc(FX.week)}`} ·${esc(dayLabel(k))} · ${esc(fmtTime(k))}</div>
@@ -203,6 +204,8 @@ async function init() {
   tick.last = status(FX, S);
   render();
   setInterval(tick, 1000);
+  // Live viewer count for this match (js/viewers.js), shown while it's live.
+  window.addEventListener('viewers', e => { const v = $('#sb-viewers'); if (v) v.innerHTML = status(FX, S) === 'live' ? viewerBadge(e.detail?.matches?.[FX.id]) : ''; });
   window.addEventListener('season-changed', e => { S = e.detail; T = teamMap(S); FX = findFixture() || FX; H = sideTeam(S, FX, 'home', T); A = sideTeam(S, FX, 'away', T); matchData = null; render(); });
 }
 

@@ -3,6 +3,7 @@ import { $, esc, logo, parseStamp, fmtDate, fmtTime, dayLabel, countdown, matchU
 import { STAGE_NAMES, sideTeam } from './league.js';
 import { publicPosts, renderPost, publicTalliesShown } from './news.js';
 import { loadTeamFiles } from './managers.js';
+import { viewerBadge } from './viewers.js';
 
 let S, T, teamFiles = {};
 const LATEST = 3;
@@ -16,7 +17,7 @@ function matchRow(fx) {
   let main, note = NOTE[st] || '';
   if (sc) {
     main = `<span class="score">${sc.home}<i>–</i>${sc.away}</span>`;
-    note = st === 'live' ? `<span class="live-note"><span class="pulse"></span>${esc(clockAt(fx.result.periods, liveSimTime(fx, S)))}</span>` : 'Full time';
+    note = st === 'live' ? `<span class="live-note"><span class="pulse"></span>${esc(clockAt(fx.result.periods, liveSimTime(fx, S)))}</span>${viewerBadge(window.hclViewers?.matches?.[fx.id])}` : 'Full time';
   } else {
     main = st === 'postponed' ? '<span class="kick pp">P–P</span>' : `<span class="kick">${esc(fmtTime(k))}</span>`;
     if (st === 'postponed' && fx.postponed_reason) note = `Postponed: ${esc(fx.postponed_reason)}`;
@@ -63,7 +64,8 @@ function renderHero() {
   const played = S.fixtures.filter(f => status(f, S) === 'ft').length;
   const fact = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
   $('#hero-facts').innerHTML = fact(S.teams.length, 'Teams') + fact((S.players || []).filter(p => T[p.team]).length, 'Players')
-    + (S.fixtures.length ? fact(`${activeWeek(S)}<small>/${weeks.size}</small>`, 'Week') + fact(`${played}<small>/${S.fixtures.length}</small>`, 'Played') : '');
+    + (S.fixtures.length ? fact(`${activeWeek(S)}<small>/${weeks.size}</small>`, 'Week') + fact(`${played}<small>/${S.fixtures.length}</small>`, 'Played') : '')
+    + (window.hclViewers?.site ? `<div class="fact-online"><b><span class="pulse" aria-hidden="true"></span>${window.hclViewers.site}</b><span>Online now</span></div>` : '');
 }
 
 function renderWeeks(selected) {
@@ -122,6 +124,8 @@ async function init() {
   }, 15000);
   // Edit mode saves changes here too.
   window.addEventListener('season-changed', e => { S = e.detail; renderAll(); });
+  // Live viewer counts (js/viewers.js): the site-wide counter and each live match.
+  window.addEventListener('viewers', () => renderAll());
 }
 
 init();

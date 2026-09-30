@@ -288,3 +288,10 @@ button, input, select { font: inherit; color: inherit; }
 .ladder .adj { color: var(--gold-solid); font-weight: 800; margin-left: 1px; }
 .ladder-notes { padding: 8px 14px 4px; font-size: .72rem; color: var(--muted); }
 .ladder-notes p { margin: 2px 0; }
+/* Live viewer counts (js/viewers.js) */
+.viewers { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.08); color: var(--text); font-size: .72rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.viewers-eye { font-size: .8em; }
+#sb-viewers:empty { display: none; }
+#sb-viewers .viewers { margin: 6px 0 0; font-size: .8rem; }
+.hero-facts .fact-online b { display: flex; align-items: center; gap: 6px; color: #6ee7b7; }
+.hero-facts .fact-online .pulse { width: 7px; height: 7px; color: var(--live); }

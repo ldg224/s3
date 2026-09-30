@@ -4,6 +4,7 @@
 // The editor who made the change doesn't see it: edit mode updates their page directly.
 
 import { SEASON_FILE } from './config.js';
+import { startViewers } from './viewers.js';
 
 const EVERY = 60 * 1000;
 const LINES = [
@@ -49,4 +50,5 @@ async function check() {
 
 check();
 setInterval(check, EVERY);
+startViewers();   // live viewer counts (js/viewers.js)
 document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });

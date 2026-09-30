@@ -21,17 +21,51 @@ var FORMATIONS = {
   '3-5-2': ['GK', 'LCB', 'CB', 'RCB', 'LWB', 'LCM', 'CDM', 'RCM', 'RWB', 'LST', 'RST'],
 };
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.action === 'ping') return reply(presence(e.parameter));
   return reply({ ok: true, service: 'HCL manager relay' });
 }
 
 function doPost(e) {
+  // A tab closing sends its "leave" ping as a beacon (a POST with the details in the URL).
+  if (e && e.parameter && e.parameter.action === 'ping') return reply(presence(e.parameter));
   try {
     var req = JSON.parse(e.postData.contents);
     return reply(handle(req));
   } catch (err) {
     return reply({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+// ---------------------------------------------------------------- live viewer counts
+// Public pages ping every 30 s while open (js/viewers.js): ?action=ping&id=<tab id>&m=<fixture id or ''>
+// (&leave=1 when the tab closes). Who's here lives only in the script cache (no GitHub, no login):
+// { id: [last seen ms, fixture id] }, and anyone not seen for 75 s has gone.
+var PRESENCE_TTL = 75 * 1000, PRESENCE_MAX = 2000;
+
+function presence(q) {
+  var cache = CacheService.getScriptCache(), now = Date.now(), seen = {};
+  try { seen = JSON.parse(cache.get('presence') || '{}'); } catch (x) { seen = {}; }
+  var id = String(q.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 16), m = String(q.m || '').replace(/[^\w-]/g, '').slice(0, 60);
+  var fresh = {}, site = 0, matches = {};
+  for (var k in seen) {
+    if (now - seen[k][0] > PRESENCE_TTL || k === id) continue;
+    fresh[k] = seen[k];
+  }
+  if (id && !q.leave && Object.keys(fresh).length < PRESENCE_MAX) fresh[id] = [now, m];
+  // Only write when the lock is free straight away: a manager save can hold it for a while, and a
+  // missed write just means this tab is counted from its next ping.
+  var lock = LockService.getScriptLock();
+  if (id && lock.tryLock(1500)) {
+    try {
+      var latest = {};
+      try { latest = JSON.parse(cache.get('presence') || '{}'); } catch (x) { latest = {}; }
+      for (var k3 in latest) if (!(k3 in fresh) && k3 !== id && now - latest[k3][0] <= PRESENCE_TTL) fresh[k3] = latest[k3];
+      cache.put('presence', JSON.stringify(fresh), 21600);
+    } finally { lock.releaseLock(); }
+  }
+  for (var k2 in fresh) { site++; if (fresh[k2][1]) matches[fresh[k2][1]] = (matches[fresh[k2][1]] || 0) + 1; }
+  return { ok: true, site: site, matches: matches };
 }
 
 function reply(obj) {
