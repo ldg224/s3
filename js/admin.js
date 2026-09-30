@@ -382,6 +382,7 @@ function fixtureCard(f, T) {
   const menu = [
     item('upload', f.result ? 'Replace match file' : 'Upload match file'),
     f.result ? item('video', '🎬 Highlights video') : '',
+    f.home && f.away ? item('press', f.result?.press ? '🎙 Press effect it was played with' : '🎙 Press effect (preview)') : '',
     !f.postponed && !f.result && f.home && f.away ? item('postpone', 'Postpone') : '',
     f.postponed || f.original ? item('restore-date', f.original?.date ? `Restore original date (${esc(fmtDate(kickoff({ ...f, ...f.original })))})` : 'Cancel postponement') : '',
     f.result ? item('clear', 'Remove result', 'danger') : '',
@@ -484,6 +485,7 @@ function fixturesTab(body) {
     if (act === 'clear') change(`Result of ${vs} removed.`, () => { uploads.delete(f.file); f.result = null; delete f.file; });
     if (act === 'upload') { uploadTarget = f.id; go('fixtures', 'upload'); }
     if (act === 'video') openVideoExport(f);
+    if (act === 'press') openPressEffect(f);
     if (act === 'sim') simulateMany([f]);
     if (act === 'postpone') {
       const reason = await askText({ title: `Postpone ${vs}?`, text: 'It stays in the fixture list, marked postponed, until you give it a new date (Reschedule).', label: 'Reason (optional, shown on the site)', ok: 'Postpone' });
@@ -509,6 +511,37 @@ function fixturesTab(body) {
   };
 }
 const nameOf = (T, c) => T[c]?.name || c || 'TBC';
+
+// ---------- Press effect (docs/PRESS_EFFECT.md) ----------
+// Played matches show the snapshot stored when they were simulated; others preview what
+// Simulate would use right now, from the team files as they are in the repo.
+
+async function openPressEffect(f) {
+  const T = Object.fromEntries(draft.teams.map(t => [t.code, t]));
+  const m = modal(`<h2>🎙 Press effect</h2><p>${esc(nameOf(T, f.home))} v ${esc(nameOf(T, f.away))} · Week ${esc(f.week ?? '?')}</p>
+    <div class="pe-body"><p class="ed-hint">Loading…</p></div><div class="ed-row"><button class="ed-btn" data-close>Close</button></div>`);
+  m.querySelector('.ed-box').classList.add('wide');
+  m.querySelector('[data-close]').onclick = () => m.remove();
+  const box = m.querySelector('.pe-body');
+  try {
+    const [{ pressEffect }, view] = await Promise.all([import('./press-effect.js'), import('./press-view.js')]);
+    let e = f.result?.press, note;
+    if (e) note = `Frozen when the match was simulated (${new Date(`${e.at}Z`).toLocaleString('en-AU')}). Later statements don't change it.`;
+    else {
+      const files = Object.fromEntries(await Promise.all(draft.teams.map(async t => {
+        const b = await readRepo(`data/teams/${t.code.toLowerCase()}.json`);
+        return [t.code, b ? JSON.parse(await b.text()) : {}];
+      })));
+      e = pressEffect(draft, files, f, { now: new Date() });
+      note = f.result ? 'This result was added before the press effect existed (or uploaded), so it was played without one. Below is what it would be now.'
+        : 'What Simulate would use if you ran it now. It changes as managers speak, until the match is simulated.';
+    }
+    box.innerHTML = `<p class="ed-hint">${esc(note)}</p>
+      ${view.pressMeters(e.home, { opp: nameOf(T, f.away), why: true, title: nameOf(T, f.home) })}
+      ${view.pressMeters(e.away, { opp: nameOf(T, f.home), why: true, title: nameOf(T, f.away) })}`;
+    box.querySelectorAll('details.pm-why').forEach(d => { d.open = true; });
+  } catch (err) { box.innerHTML = `<p class="ed-err">Couldn't work out the press effect: ${esc(err.message)}</p>`; }
+}
 
 // ---------- Highlights video ----------
 // Renders a ~3 minute highlights MP4, thumbnail and YouTube text for a fixture, in the browser,
@@ -700,6 +733,7 @@ async function attachMatch(f, d) {
   ensureTeams(d);
   f.file = `${MATCH_DIR}/${f.id}.json.gz`;
   f.result = summariseMatch(d);
+  if (d.press) f.result.press = d.press;   // the press effect it was played with (docs/PRESS_EFFECT.md)
   try { (await import('./league.js')).applyKnockoutRules?.(draft, f, d); } catch { /* league rules not installed */ }
   const gz = await new Response(new Blob([JSON.stringify(d)]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
   uploads.set(f.file, gz);

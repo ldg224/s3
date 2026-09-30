@@ -296,3 +296,30 @@ button, input, select { font: inherit; color: inherit; }
 .hero-facts .fact-online b { display: flex; align-items: center; gap: 6px; color: #6ee7b7; }
 .hero-facts .fact-online .pulse { width: 7px; height: 7px; color: var(--live); }
 .live-note .added { color: #8fff06; font-weight: 900; }
+
+/* ---------- Press meters (js/press-view.js; docs/PRESS_EFFECT.md) ----------
+   Diverging colours, checked with the dataviz palette validator on --surface:
+   up #0f9f70, down #ec4a44, neutral #9ca3af. Every value also has ▲/▼ and a sign. */
+:root { --pm-up: #0f9f70; --pm-down: #ec4a44; --pm-flat: #9ca3af; }
+.pm { display: grid; gap: 10px; }
+.pm-title { margin: 0; font-size: .9rem; font-weight: 800; }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.pm-tile { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); cursor: help; }
+.pm-label { font-size: .72rem; font-weight: 700; color: var(--muted); }
+.pm-value { font-size: 1.25rem; font-weight: 900; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px; }
+.pm-value.up { color: var(--pm-up); } .pm-value.down { color: var(--pm-down); } .pm-value.flat { color: var(--pm-flat); }
+.pm-arrow { font-size: .7em; }
+.pm-bar { position: relative; height: 6px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; }
+.pm-bar::after { content: ''; position: absolute; left: 50%; top: -1px; bottom: -1px; width: 2px; margin-left: -1px; background: var(--surface); }
+.pm-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.pm-fill.up { background: var(--pm-up); } .pm-fill.down { background: var(--pm-down); } .pm-fill.flat { background: var(--pm-flat); }
+.pm-mood { font-size: .74rem; font-weight: 700; color: var(--text); }
+.pm-why > summary { cursor: pointer; font-size: .8rem; font-weight: 800; color: var(--muted); }
+.pm-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: 6px; }
+.pm-table th, .pm-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pm-table th { font-size: .7rem; color: var(--muted); }
+.pm-table .pm-value { font-size: .85rem; }
+.pm-note { margin: 4px 0 0; font-size: .76rem; color: var(--muted); }
+.pm-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.pm-chip { font-size: .72rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.06); font-variant-numeric: tabular-nums; }
+.pm-chip.up { color: var(--pm-up); } .pm-chip.down { color: var(--pm-down); } .pm-chip.flat { color: var(--pm-flat); }

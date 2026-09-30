@@ -3,8 +3,11 @@ import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onC
 import { playerCard, MatchPlayer } from './match-player.js';
 import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
 import { viewerBadge } from './viewers.js';
+import { pressMeters } from './press-view.js';
+import { pressFor } from './press-panels.js';
+import { loadTeamFiles } from './managers.js';
 
-let S, T, FX, H, A, player = null, matchData = null;
+let S, T, FX, H, A, player = null, matchData = null, teamFiles = null;
 
 const POS_ORDER = ['GK', 'DEF', 'MID', 'FWD'];
 
@@ -153,6 +156,15 @@ function formCard() {
   return `<section class="card"><h2 class="card-title">Recent form</h2><div class="two">${col(FX.home)}${col(FX.away)}</div></section>`;
 }
 
+// What the managers said before this match, and what it did (docs/PRESS_EFFECT.md).
+function pressCard() {
+  const p = pressFor(S, teamFiles, FX);
+  if (!p) return '';
+  return `<section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Press conference effect <span>${FX.result ? 'what went into this match' : 'so far, before kick-off'}</span></h2>
+    <div class="press-two">${pressMeters(p.home, { opp: A.name, why: true, title: H.name })}${pressMeters(p.away, { opp: H.name, why: true, title: A.name })}</div>
+    <p class="muted" style="font-size:.78rem;margin:0">What each manager said in the <a href="press.html">press room</a> since their last match nudges fans, team happiness and how sharp the team plays (up to ±5%).${FX.result ? '' : ' It’s fixed when the match is played.'}</p></section>`;
+}
+
 // ---------- Page ----------
 
 function render() {
@@ -164,6 +176,7 @@ function render() {
       <div class="stack">${replayCard()}<div id="timeline-slot">${timelineCard()}</div></div>
       <aside class="stack">${side}</aside>
     </div>
+    <div id="press-slot">${known ? pressCard() : ''}</div>
     ${known ? `<div id="roster-slot">${rosterCard()}</div>${formCard()}` : ''}
   </div>`;
   document.title = `${H.code} v ${A.code} | HCL S3`;
@@ -207,6 +220,8 @@ async function init() {
   A = sideTeam(S, FX, 'away', T);
   tick.last = status(FX, S);
   render();
+  // A match that hasn't been simulated shows a projection from every team's press file.
+  if (!FX.result && FX.home && FX.away) loadTeamFiles(S).then(f => { teamFiles = f; const s = $('#press-slot'); if (s) s.innerHTML = pressCard(); }).catch(() => {});
   setInterval(tick, 1000);
   // Live viewer count for this match (js/viewers.js), shown while it's live.
   window.addEventListener('viewers', e => { const v = $('#sb-viewers'); if (v) v.innerHTML = status(FX, S) === 'live' ? viewerBadge(e.detail?.matches?.[FX.id]) : ''; });

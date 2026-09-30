@@ -349,3 +349,7 @@ button.squad-chip[aria-pressed="true"] { border-color: currentColor; }
 .lg-list { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }
 .lg-preview:empty { display: none; }
 .lg-preview { font-size: .82rem; }
+
+/* Press effect dialog (js/admin.js openPressEffect; meters styled in styles.css) */
+.pe-body { display: grid; gap: 16px; max-height: min(70vh, 640px); overflow: auto; padding-right: 4px; }
+.ed-box.wide:has(.pe-body) { width: min(760px, 100%); }

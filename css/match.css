@@ -174,3 +174,7 @@ body.mp-fs-open { overflow: hidden; }
 /* Added time (the fourth official's board) under the live clock */
 .sb-added { display: block; font-variant-numeric: tabular-nums; font-weight: 900; font-size: .8rem; color: #8fff06; }
 .sb-added:empty { display: none; }
+
+/* Press conference effect: both teams' meters (tiles from js/press-view.js) */
+.press-two { display: grid; gap: 16px; }
+@media (min-width: 900px) { .press-two { grid-template-columns: 1fr 1fr; } }

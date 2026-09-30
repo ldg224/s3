@@ -9,6 +9,7 @@
 // is passed. The engine (Pyodide, about 10 MB, cached by the browser) loads on the first call only.
 
 import { suspensions } from './league.js';
+import { pressEffect } from './press-effect.js';
 
 const POSITIONS = ['GK', 'DEF', 'MID', 'FWD'];
 let worker = null, readyPromise = null, jobSeq = 0;
@@ -101,8 +102,18 @@ export async function simulateFixture(season, fixture, { onProgress, seed } = {}
   const suspended = (suspensions(season).get(fixture.id) || []).map(s => ({ player: String(s.player), reason: s.reason }));
   const out = new Set(suspended.map(s => s.player));
   toLeague(season, [fixture.home, fixture.away], out);   // validates squads before loading anything
-  const [home, away] = await Promise.all([managerFile(fixture.home), managerFile(fixture.away)]);
+  // Every team's manager file: the two playing set tactics; all of them feed the press effect
+  // (what managers said this week, and the fans / happiness carried over from earlier matches).
+  const files = Object.fromEntries(await Promise.all(season.teams.map(async t => [t.code, await managerFile(t.code)])));
+  const home = files[fixture.home] || {}, away = files[fixture.away] || {};
   const league = toLeague(season, [fixture.home, fixture.away], out, { [fixture.home]: home, [fixture.away]: away });
+  // Press effect (docs/PRESS_EFFECT.md): a small, capped performance change for each team.
+  let press = null;
+  try { press = pressEffect(season, files, fixture, { now: new Date() }); } catch (e) { console.warn('Press effect skipped:', e); }
+  if (press) {
+    league.tactics[fixture.home].form = press.home.final;
+    league.tactics[fixture.away].form = press.away.final;
+  }
   await start();
   const job = ++jobSeq;
   return new Promise((resolve, reject) => {
@@ -115,5 +126,5 @@ export async function simulateFixture(season, fixture, { onProgress, seed } = {}
         stage: fixture.stage || null, suspended,
       },
     });
-  });
+  }).then(data => { if (press) data.press = press; return data; });   // kept with the result (edit mode copies it)
 }

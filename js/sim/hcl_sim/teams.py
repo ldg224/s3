@@ -3,10 +3,36 @@
 from . import ratings, tactics
 from .models import Player, Team
 
+# Skill attributes scaled by a team's per-match form (the press effect, docs/PRESS_EFFECT.md in the site).
+# Physical ones (pace, acceleration, stamina, strength, agility, aggression) are left alone so
+# movement physics stays realistic; kicking (goalkeeper distribution) is also left alone.
+FORM_ATTRS = ('composure', 'decisions', 'passing', 'first_touch', 'finishing', 'long_shots', 'tackling',
+              'marking', 'positioning', 'work_rate', 'crossing', 'dribbling', 'vision', 'heading',
+              'reflexes', 'handling', 'gk_positioning', 'diving')
+FORM_CAP = 0.05   # form is clamped to +/- 5%
+
+
+def _form(value):
+    """The tactics 'form' value as a clamped fraction (0 when missing or not a number)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
+        return 0.0
+    return max(-FORM_CAP, min(FORM_CAP, float(value)))
+
+
+def apply_form(players, form):
+    """Scales each player's FORM_ATTRS by (1 + form), clamped to 1..99 and rounded to 0.1 like ratings.derive. Does nothing when form is 0."""
+    if not form:
+        return
+    for p in players:
+        for k in FORM_ATTRS:
+            if k in p.attrs:
+                p.attrs[k] = round(max(1.0, min(99.0, p.attrs[k] * (1 + form))), 1)
+
 
 def build_team(league, code):
     info = league['teams'][code]
     tac = dict(league['tactics'].get(code, {}))
+    form = _form(tac.pop('form', 0))
     formation = tac.pop('formation', None) or '4-3-3'
     if formation not in tactics.FORMATIONS:
         print(f'warning: unknown formation {formation!r} for {code}, using 4-3-3')
@@ -36,9 +62,10 @@ def build_team(league, code):
         p.slot = slot
         p.line = tactics.FORMATIONS[formation][slot][0]
         starters.append(p)
+    apply_form(starters, form)   # after picking the XI, so form never changes who plays
     tac_clean = {k: v / 100 if v > 1 else v for k, v in tac.items() if isinstance(v, (int, float))}
     return Team(code=code, name=info['name'], colour=info['colour'], players=starters, formation=formation, tactics=tac_clean,
-                takers=takers, captain=captain if any(str(p.id) == captain for p in starters) else '')
+                takers=takers, form=form, captain=captain if any(str(p.id) == captain for p in starters) else '')
 
 
 def resolve_team(league, value):

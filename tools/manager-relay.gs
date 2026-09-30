@@ -131,6 +131,27 @@ function checkLogin(season, team, email, pin) {
   cache.remove(key);
 }
 
+// Press answers are dated by this script, not by the manager's browser, because the press
+// effect (docs/PRESS_EFFECT.md) counts what was said before each match:
+// - a new answer is dated now, with the tactics the team had at that moment (`tac`), so a
+//   tactical claim can't be made true later by moving a slider;
+// - an edited answer keeps its original date and tactics and gets `edited` (it counts half,
+//   and editing can't move an old answer into this week);
+// - the team-news message gets its own date (message_date) the same way.
+function stampPress(file, stored) {
+  var now = new Date().toISOString().slice(0, 19), old = {};
+  (Array.isArray(stored.press) ? stored.press : []).forEach(function (p) { if (p && p.id) old[p.id] = p; });
+  var tac = { pressing: file.tactics.pressing, directness: file.tactics.directness, width: file.tactics.width };
+  file.press.forEach(function (p) {
+    var was = old[p.id];
+    if (!was) { p.date = now; p.tac = tac; delete p.edited; return; }
+    p.date = was.date || now;
+    if (was.tac) p.tac = was.tac; else delete p.tac;
+    if (was.a !== p.a) p.edited = now; else if (was.edited) p.edited = was.edited; else delete p.edited;
+  });
+  file.message_date = file.message && file.message === stored.message && stored.message_date ? stored.message_date : (file.message ? now : '');
+}
+
 function text(v, max) {
   return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, max);
 }
@@ -156,12 +177,16 @@ function clean(season, team, f, news) {
   });
   var pick = function (id) { id = String(id || ''); return ids[id] ? id : null; };
   var press = (Array.isArray(f.press) ? f.press : []).slice(-100).map(function (x) {
-    return { id: text(x.id, 80), q: text(x.q, 300), a: text(x.a, 1500), date: text(x.date, 30), from: text(x.from, 40) };
+    var item = { id: text(x.id, 80), q: text(x.q, 300), a: text(x.a, 1500), date: text(x.date, 30), from: text(x.from, 40) };
+    // Set by stampPress on save; anything the browser sends is replaced there.
+    if (x.edited) item.edited = text(x.edited, 30);
+    if (x.tac && typeof x.tac === 'object') item.tac = { pressing: Number(x.tac.pressing) || 0.5, directness: Number(x.tac.directness) || 0.5, width: Number(x.tac.width) || 0.5 };
+    return item;
   }).filter(function (x) { return x.a.trim(); });
   return {
     team: team, updated: new Date().toISOString().slice(0, 19), formation: formation, tactics: tactics, lineup: lineup, bench: bench,
     captain: pick(f.captain), penalties: pick(f.penalties), freekicks: pick(f.freekicks), corners: pick(f.corners),
-    message: text(f.message, 500), press: press, news: news || {},
+    message: text(f.message, 500), message_date: text(f.message_date, 30), press: press, news: news || {},
   };
 }
 
@@ -374,6 +399,7 @@ function handle(req) {
       if (req.action === 'save') {
         // Lineup, tactics and press come from the manager; news stays as stored.
         file = clean(season, team, req.file, cleanNews(season, team, stored.news));
+        stampPress(file, stored);
         what = text(req.what || 'updated their team', 80);
       } else {
         var news = cleanNews(season, team, stored.news);

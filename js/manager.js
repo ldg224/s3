@@ -7,6 +7,8 @@ import { loadSeason, teamMap, playerTotals, kickoff, status, ladder, finished, r
 import { $, esc, logo, safeColour, onColour, countdown, dayLabel, fmtTime, matchUrl } from './ui.js';
 import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, loadTeamFiles, findManagerTeam, relaySave, pressQuestions } from './managers.js';
 import { newsPane, bannerHtml, badgeCount, tickDue } from './manager-news.js';
+import { pressMeters } from './press-view.js';
+import { pressFor, nextFixture, headingInto } from './press-panels.js';
 
 const SESSION = 'hcl-manager';
 let S, T, me = null;          // me = { email, pin, team }
@@ -83,6 +85,7 @@ async function openTeam() {
     delete all[code];   // our own file is `file`, which is fresher
     teamFiles = all;
     if (tab === 'news' && !document.querySelector('#pane form.nw-form :focus')) paneOnly();
+    const pm = document.getElementById('press-mine'); if (pm) pm.innerHTML = myMeters();   // now with the opponent's jabs too
   });
 }
 
@@ -363,11 +366,32 @@ function squadPane(pane) {
 
 // ---------- Media ----------
 
+// This team's press meters heading into its next match (docs/PRESS_EFFECT.md), with the reasons.
+function myMeters() {
+  const fx = nextFixture(S, me.team);
+  if (!fx) return '<p class="muted" style="margin:0">No match coming up, so nothing you say counts yet.</p>';
+  const opp = T[fx.home === me.team ? fx.away : fx.home]?.name || 'your opponent';
+  const p = pressFor(S, { ...teamFiles, [me.team]: file }, fx), side = p?.[fx.home === me.team ? 'home' : 'away'];
+  if (!side) return '';
+  return `${fx.result ? `<p class="muted" style="margin:0;font-size:.82rem">Your match v ${esc(opp)} has already been played out behind the scenes, so these are locked in. What you say now counts toward the match after.</p>` : ''}
+    ${pressMeters(side, { opp, why: true, title: headingInto(fx, opp) })}`;
+}
+const PRESS_RULES = `<ul class="press-rules">
+  <li>Everything you say after your last match counts toward the next one, until it's played.</li>
+  <li>Answering the media's questions counts for more than your own statements.</li>
+  <li>Say each thing once: a repeat counts once and annoys the fans, and only your strongest few comments count.</li>
+  <li>Praise and backing your players lifts the dressing room; blaming them in public hurts it. Fans like respect, honesty and thanks, not excuses or arrogance.</li>
+  <li>A jab at your next opponent only lands if it's true (their form, late goals, a suspension, or a tactic you really use). Empty trash talk fires them up instead.</li>
+</ul>`;
+
 function mediaPane(pane) {
   const open = pressQuestions(S, me.team).filter(q => !file.press.some(p => p.id === q.id));
   const past = [...file.press].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const when = d => (d ? new Date(d).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
   pane.innerHTML = `<div class="stack">
+    <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Your press meters</h2>
+      <div id="press-mine" class="stack" style="gap:10px">${myMeters()}</div>
+      <details><summary class="muted" style="cursor:pointer;font-size:.85rem">How the press effect works</summary>${PRESS_RULES}</details></section>
     <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Questions from the media <span>${open.length} waiting</span></h2>
       ${open.map(q => `<div class="qcard" data-q="${esc(q.id)}"><span class="from">${esc(q.from)}</span><div class="q">${esc(q.q)}</div>
         <textarea class="textarea" maxlength="1500" placeholder="Your answer…"></textarea><div class="chips"><button class="btn primary small" data-answer>Publish answer</button></div></div>`).join('')

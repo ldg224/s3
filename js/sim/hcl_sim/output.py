@@ -138,11 +138,14 @@ def _team_stats(m, pstats):
 
 
 def _team_block(team):
-    return {
+    block = {
         'code': team.code, 'name': team.name, 'colour': team.colour, 'formation': team.formation,
         'tactics': team.tactics, 'captain': team.captain or None, 'takers': team.takers,
-        'lineup': [{'idx': p.idx, 'id': p.id, 'name': p.name, 'position': p.position, 'slot': p.slot} for p in team.players],
     }
+    if team.form:
+        block['form'] = round(team.form, 4)
+    block['lineup'] = [{'idx': p.idx, 'id': p.id, 'name': p.name, 'position': p.position, 'slot': p.slot} for p in team.players]
+    return block
 
 
 def build(m, include_frames=True):

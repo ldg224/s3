@@ -171,3 +171,18 @@ button.prow:hover { border-color: rgba(255,255,255,.18); }
   .nwb-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title go" "why go" "due go"; }
   .nwb-row .nw-chip { justify-self: start; margin-top: 4px; }
 }
+
+/* Press meters in the press room and the Manager Hub (tiles from js/press-view.js) */
+.press-teams { display: grid; gap: 18px; }
+@media (min-width: 900px) { .press-teams { grid-template-columns: 1fr 1fr; } }
+.press-teams { gap: 10px; }
+.press-team { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; background: rgba(255,255,255,.02); }
+.press-team > summary { list-style: none; cursor: pointer; display: grid; gap: 8px; }
+.press-team > summary::-webkit-details-marker { display: none; }
+.press-team-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.press-team-name .muted { font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.press-team-name::after { content: '▸'; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.press-team[open] .press-team-name::after { transform: rotate(90deg); }
+.press-team[open] > summary { margin-bottom: 10px; }
+.press-team .pm-chips { flex-wrap: wrap; }
+.press-rules { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: .8rem; color: var(--muted); }

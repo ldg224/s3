@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<!-- Dev tool: checks js/press-effect.js readStatement() against tools/press-effect-cases.js.
+     Serve the site root (python -m http.server) and open /tools/press-effect-test.html,
+     or run it in headless Chrome and read the console ("PE:" lines). Not linked from the site. -->
+<html lang="en"><head><meta charset="utf-8"><title>Press effect tests</title><meta name="robots" content="noindex">
+<style>body{font:14px/1.4 system-ui;background:#111;color:#ddd;padding:16px}.f{color:#f87171}.p{color:#6ee7b7}td{padding:2px 8px;vertical-align:top;border-bottom:1px solid #333}</style></head>
+<body><h1>Press effect tests</h1><div id="out">Running…</div>
+<script type="module">
+import { readStatement, similarity } from '../js/press-effect.js';
+// #holdout / #holdout2 run the independent sets in press-effect-holdout.js (the reader was never tuned on it).
+const HOLD = /^#holdout2?$/.test(location.hash);
+const set = location.hash === '#holdout2' ? await import('./press-effect-holdout2.js') : HOLD ? await import('./press-effect-holdout.js') : await import('./press-effect-cases.js');
+const { CONTEXT, CASES } = set, SPAM_SETS = set.SPAM_SETS || [];
+
+// Debug one statement: /tools/press-effect-test.html#text=your words here
+if (location.hash.startsWith('#text=')) {
+  const r = readStatement(decodeURIComponent(location.hash.slice(6)), CONTEXT);
+  console.log('PE: ' + JSON.stringify(r.signals));
+  for (const x of r.reasons) console.log(`PE:   ${x.signal} ${x.v} "${x.quote}" ${x.note}`);
+  throw new Error('debug only');
+}
+const TH = 0.15;
+const ok = (want, v) => (want === '+' ? v >= TH : want === '-' ? v <= -TH : Math.abs(v) < TH);
+const rows = [];
+let pass = 0, fail = 0;
+const bySignal = {};
+for (const c of CASES) {
+  const r = readStatement(c.text, CONTEXT);
+  const bad = Object.entries(c.expect).filter(([k, want]) => !ok(want, r.signals[k] ?? 0));
+  for (const [k, want] of Object.entries(c.expect)) {
+    const b = (bySignal[k] ||= { pass: 0, fail: 0 });
+    ok(want, r.signals[k] ?? 0) ? b.pass++ : b.fail++;
+  }
+  if (bad.length) { fail++; rows.push({ c, r, bad }); } else pass++;
+}
+// Spam groups: 'dedupe' means every item is similar to the first; 'distinct' means none are.
+const spam = SPAM_SETS.map(g => {
+  const rs = g.items.map(t => readStatement(t, CONTEXT));
+  const sims = rs.slice(1).map(r => similarity(rs[0], r));
+  const good = g.expect === 'dedupe' ? sims.every(s => s >= 0.55) : sims.every(s => s < 0.55);
+  return { g, good, min: Math.min(...sims), max: Math.max(...sims) };
+});
+const out = [`CASES ${pass}/${CASES.length} pass`, `SPAM ${spam.filter(s => s.good).length}/${spam.length} pass`,
+  ...Object.entries(bySignal).map(([k, b]) => `  ${k}: ${b.pass}/${b.pass + b.fail}`)];
+for (const line of out) console.log('PE: ' + line);
+for (const { c, r, bad } of rows) console.log('PE: FAIL ' + JSON.stringify(c.text).slice(0, 110) + ' | ' + bad.map(([k, w]) => `${k} want ${w} got ${r.signals[k]}`).join(', ') + ' | ' + c.note);
+for (const s of spam.filter(s => !s.good)) console.log(`PE: SPAMFAIL ${s.g.expect} ${s.g.note} min=${s.min.toFixed(2)} max=${s.max.toFixed(2)}`);
+// ---- Whole-team scenarios on the real league: /tools/press-effect-test.html#scenarios
+if (location.hash === '#scenarios') {
+  const { pressEffect } = await import('../js/press-effect.js');
+  const season = await (await fetch('../data/season.json', { cache: 'no-store' })).json();
+  const { kickoff } = await import('../js/data.js');
+  // An upcoming TUR v LAU (either way round); pretend it's being simulated an hour before kick-off.
+  const fx = season.fixtures.filter(f => [f.home, f.away].sort().join() === 'LAU,TUR' && !f.result && f.date).sort((a, b) => kickoff(a) - kickoff(b))[0];
+  const now = new Date(kickoff(fx) - 3600e3);
+  const at = (h) => new Date(+now - h * 3600e3).toISOString().slice(0, 19);
+  const mk = (texts, kind = 'statement') => texts.map((a, i) => ({ id: `t${i}`, q: kind === 'answer' ? 'Next up is Lads United. What are you expecting?' : 'Statement', a, date: at(1 + i * 0.01) }));
+  const files = press => ({ TUR: { tactics: { pressing: 0.9, directness: 0.3, width: 0.5 }, press }, LAU: { tactics: {}, press: [] } });
+  const spam = Array.from({ length: 8000 }, (_, i) => ['i know that lads united dont play well under our attacking pressure', 'Lads United dont play well under our attacking pressure!!', 'lads utd cant handle our pressure, everyone knows it', 'I KNOW LADS UNITED DONT PLAY WELL UNDER PRESSURE'][i % 4] + (i % 7 ? '' : ' 🔥'));
+  const scen = {
+    'nothing said': [],
+    'one credible jab': mk(['i know that lads united dont play well under our attacking pressure']),
+    'the same jab x8000': mk(spam),
+    'good presser': mk(['Proud of the lads last week, Flynn Broadbent was outstanding. Huge thanks to everyone who came down, the support was incredible.', 'Lads United are a decent side, we respect them, but we are ready and we believe in what we are doing.', 'We were sloppy in the second half last week, that is on me, we will learn from it.'], 'answer'),
+    'toxic presser': mk(['The ref robbed us again, disgrace.', 'Some players need to have a look at themselves, Hayden Cross was useless.', 'We will smash Lads United 5-0, easy, they are a pub team.', 'fans who booed can stay home']),
+    'good + spam of good': mk([...Array.from({ length: 50 }, () => 'Huge thanks to the fans, proud of the lads, we go again together.')]),
+  };
+  for (const [name, press] of Object.entries(scen)) {
+    const f = files(press);
+    const t0 = performance.now();
+    const e = pressEffect(season, f, fx, { now });
+    const me = e[fx.home === 'TUR' ? 'home' : 'away'], them = e[fx.home === 'TUR' ? 'away' : 'home'];
+    console.log(`PE: SCEN ${name.padEnd(20)} TUR fans ${me.fans} happy ${me.happiness} perf ${(me.perf * 100).toFixed(2)}% final ${(me.final * 100).toFixed(2)}% | LAU hit by ${(them.received * 100).toFixed(2)}% final ${(them.final * 100).toFixed(2)}% | counted ${me.counted.length} repeats ${me.repeats.length} ignored ${me.ignored.length} | ${Math.round(performance.now() - t0)}ms`);
+    if (name === 'the same jab x8000' || name === 'toxic presser') for (const r of me.reasons) console.log(`PE:     ${r.meter} ${r.v} ${r.reason}`);
+  }
+  throw new Error('scenarios only');
+}
+document.getElementById('out').innerHTML =`<p>${out.join('<br>')}</p><table>${rows.map(({ c, r, bad }) => `<tr><td class="f">${c.text.replace(/</g, '&lt;')}</td><td>${bad.map(([k, w]) => `${k}: want ${w}, got ${r.signals[k]}`).join('<br>')}</td><td>${c.note}</td></tr>`).join('')}</table>`;
+</script></body></html>

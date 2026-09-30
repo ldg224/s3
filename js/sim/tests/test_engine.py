@@ -123,6 +123,52 @@ class ManagerChoices(unittest.TestCase):
         self.assertEqual((team.formation, team.takers, team.captain), ('4-3-3', {}, ''))
 
 
+class Form(unittest.TestCase):
+    """The per-match form modifier (tactics 'form', the site's press effect)."""
+
+    def test_form_scales_exactly_the_skill_attributes(self):
+        from hcl_sim.teams import FORM_ATTRS, build_team
+        base = {p.id: dict(p.attrs) for p in build_team(synthetic_league(), 'AAA').players}
+        league = synthetic_league()
+        league['tactics']['AAA'] = {'form': 0.04}
+        team = build_team(league, 'AAA')
+        self.assertEqual(team.form, 0.04)
+        self.assertNotIn('form', team.tactics)
+        for p in team.players:
+            for k, v in base[p.id].items():
+                want = round(max(1.0, min(99.0, v * 1.04)), 1) if k in FORM_ATTRS else v
+                self.assertEqual(p.attrs[k], want, k)
+        for k in ('pace', 'acceleration', 'stamina', 'strength', 'agility', 'aggression'):
+            self.assertNotIn(k, FORM_ATTRS)
+        # The other team is untouched.
+        self.assertEqual(build_team(league, 'BBB').form, 0.0)
+
+    def test_form_is_clamped(self):
+        from hcl_sim.teams import build_team
+        for given, want in ((0.2, 0.05), (-1, -0.05), (0.03, 0.03), ('0.03', 0.0), (None, 0.0)):
+            league = synthetic_league()
+            league['tactics']['AAA'] = {'form': given}
+            self.assertEqual(build_team(league, 'AAA').form, want, given)
+
+    def test_no_form_gives_the_same_match(self):
+        base = simulate(synthetic_league(), 'AAA', 'BBB', seed=5)
+        for form in (0, 0.0):
+            league = synthetic_league()
+            league['tactics']['AAA'] = {'form': form}
+            again = simulate(league, 'AAA', 'BBB', seed=5)
+            self.assertNotIn('form', again['teams']['home'])
+            again['engine']['generated_at'] = base['engine']['generated_at']
+            self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(base, sort_keys=True))
+
+    def test_form_is_written_to_the_output(self):
+        league = synthetic_league()
+        league['tactics']['BBB'] = {'form': -0.09}
+        m = simulate(league, 'AAA', 'BBB', seed=5, include_frames=False)
+        self.assertEqual(m['teams']['away']['form'], -0.05)
+        self.assertNotIn('form', m['teams']['home'])
+        self.assertNotIn('form', m['teams']['away']['tactics'])
+
+
 class Validator(unittest.TestCase):
     def _match(self):
         league = synthetic_league()

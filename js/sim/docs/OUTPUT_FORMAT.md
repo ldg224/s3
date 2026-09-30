@@ -45,6 +45,15 @@ manager's picks: `lineup` ({slot: player id}; empty or invalid slots are filled 
 `captain`, `penalties`, `freekicks`, `corners` (player ids). `captain` is `null` and `takers` is
 `{}` when none were chosen.
 
+It may also hold `form`, a per-match skill modifier as a fraction (the site's press effect, e.g.
+`0.03` = +3%), clamped to ±0.05. It multiplies the starting XI's skill attributes (composure,
+decisions, passing, first_touch, finishing, long_shots, tackling, marking, positioning, work_rate,
+crossing, dribbling, vision, heading, reflexes, handling, gk_positioning, diving; not pace,
+acceleration, stamina, strength, agility, aggression or kicking) by `1 + form`, clamped to 1..99,
+after the XI is picked. The team block then carries `"form": 0.03` (the clamped value) next to
+`takers`, and the players' `attributes` are the scaled match-day values. With no `form`, or 0, the
+key is left out and the match is identical to one simulated without it (same seed).
+
 ### Player
 
 ```jsonc
