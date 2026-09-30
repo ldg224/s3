@@ -19,6 +19,7 @@ export function playerCard(st) {
       <div class="mp-tabs" role="tablist">${tabs.map(([k, l], i) => `<button role="tab" data-view="${k}" aria-selected="${i === 0}">${l}</button>`).join('')}</div>
       ${st === 'ft' ? '<button class="ctl mp-dl-btn" data-dl aria-expanded="false">⬇ Download</button>' : ''}</div>
     <div class="mp-dl" hidden></div>
+    <div class="mp-screen" id="mp-screen">
     <div class="mp-stage" id="mp-stage">
       <canvas class="mp-canvas" id="mp-canvas" width="1280" height="720" aria-label="Match video"></canvas>
       <canvas class="mp-tactical" id="pitch" width="1110" height="740" aria-label="Tactical view" hidden></canvas>
@@ -32,6 +33,7 @@ export function playerCard(st) {
       <span class="replay-clock" id="mp-time">0:00</span>
       <div class="mp-seek"><input type="range" id="mp-seek" min="0" max="1" step="0.05" value="0" aria-label="Position"><div class="mp-marks" id="mp-marks"></div></div>
       <button class="ctl" id="mp-full" aria-label="Full screen" title="Full screen">⛶</button>
+    </div>
     </div>
   </section>`;
 }
@@ -200,6 +202,8 @@ export class MatchPlayer {
       if (e.target.closest('#mp-play, #mp-big')) return (this.view === 'tactical' ? this.tactical?.playing : this.playing) ? this.pause() : this.play();
       if (e.target.closest('#mp-live')) { this.speed = liveSpeed(this.FX, this.S); if (this.tactical) this.tactical.speed = this.speed; this.seek(liveSimTime(this.FX, this.S)); return this.play(); }
       if (e.target.closest('#mp-full')) return this.fullscreen();
+      // Full screen with the controls hidden: the first tap only brings them back.
+      if (this._tapWoke && e.target.closest('.mp-stage')) { this._tapWoke = false; return; }
       if (e.target.closest('[data-dl]')) return this.toggleDownloads();
       if (e.target.closest('.mp-canvas') && this.view !== 'tactical') return this.playing ? this.pause() : this.play();
     });
@@ -210,19 +214,62 @@ export class MatchPlayer {
     this.timeline?.addEventListener('click', e => { const r = e.target.closest('.tl-row'); if (r) this.jump(+r.dataset.t); });
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(this.$('#mp-stage'));
-    document.addEventListener('fullscreenchange', () => this.resize());
+    const onFs = () => this.setFs(!!(document.fullscreenElement || document.webkitFullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    // Controls fade while playing full screen; any movement, touch or key brings them back.
+    const scr = this.$('#mp-screen');
+    scr.addEventListener('pointerdown', () => { this._tapWoke = this.fsWake(); }, { passive: true });
+    for (const ev of ['pointermove', 'keydown']) scr.addEventListener(ev, () => this.fsWake(), { passive: true });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && this.fsFake) this.setFs(false); });
   }
 
+  // Full screen covers the picture and the controls (#mp-screen). Where the Fullscreen API
+  // isn't available for page elements (Safari on iPhone only allows it for <video>), or it's
+  // refused, the player becomes a fixed layer over the whole page instead.
   fullscreen() {
-    const st = this.$('#mp-stage');
-    if (document.fullscreenElement) return document.exitFullscreen();
-    (st.requestFullscreen || st.webkitRequestFullscreen)?.call(st)?.catch?.(() => {});
+    if (document.fullscreenElement || document.webkitFullscreenElement) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    if (this.fsFake) return this.setFs(false);
+    const scr = this.$('#mp-screen'), req = scr.requestFullscreen || scr.webkitRequestFullscreen;
+    const fake = () => { this.fsFake = true; this.setFs(true); };
+    if (!req || document.fullscreenEnabled === false) return fake();
+    try {
+      const p = req.call(scr);
+      if (p?.catch) p.catch(fake);
+    } catch { fake(); }
     screen.orientation?.lock?.('landscape').catch(() => {});
+  }
+
+  setFs(on) {
+    const scr = this.$('#mp-screen'), btn = this.$('#mp-full');
+    if (!on) this.fsFake = false;
+    scr.classList.toggle('mp-fs', on);
+    document.body.classList.toggle('mp-fs-open', on);
+    btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+    btn.title = on ? 'Exit full screen (Esc)' : 'Full screen';
+    btn.textContent = on ? '✕' : '⛶';
+    this.fsWake();
+    this.resize();
+  }
+
+  // Show the controls again and restart the hide timer. Returns true if they were hidden.
+  fsWake() {
+    const scr = this.$('#mp-screen'), was = scr.classList.contains('mp-idle');
+    scr.classList.remove('mp-idle');
+    clearTimeout(this._idle);
+    if (scr.classList.contains('mp-fs')) this._idle = setTimeout(() => {
+      const playing = this.view === 'tactical' ? this.tactical?.playing : this.playing;
+      if (playing && !scr.contains(document.activeElement?.closest?.('.mp-controls') || null)) scr.classList.add('mp-idle');
+      else this.fsWake();
+    }, 3000);
+    return was;
   }
 
   resize() {
     const box = this.$('#mp-stage').getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
-    const w = Math.max(320, Math.min(Math.round(box.width * dpr), Math.round(W * this.scale)));
+    // Full screen may be taller or wider than 16:9; draw for the part the picture actually fills.
+    const fit = Math.min(box.width, box.height ? box.height * W / H : box.width);
+    const w = Math.max(320, Math.min(Math.round(fit * dpr), Math.round(W * this.scale)));
     const h = Math.round(w * H / W);
     if (this.cv.width !== w) { this.cv.width = w; this.cv.height = h; this.dirty = true; }
   }
