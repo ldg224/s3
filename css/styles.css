@@ -1,32 +1,41 @@
 /* ==========================================================
-   HCL Season 3. Dark theme, lime brand gradient, team-colour accents.
+   vLeague Season 1. Navy background, the Material Blue ramp, white as the accent (docs/BRAND.md).
    Mobile first: every layout works from 320px phones up to wide desktops.
-   Season colours live in the tokens below (--brand-*).
+   League colours live in the tokens below; team colours are the teams' own.
    ========================================================== */
 :root {
-  --bg: #0f1115;
-  --text: #f9fafb;
-  --muted: #9ca3af;
-  --faint: #6b7280;
-  --line: rgba(255, 255, 255, 0.08);
+  /* The Material Blue ramp */
+  --blue-50: #e3f2fd; --blue-100: #bbdefb; --blue-200: #90caf9; --blue-300: #64b5f6; --blue-400: #42a5f5;
+  --blue-500: #2196f3; --blue-600: #1e88e5; --blue-700: #1976d2; --blue-800: #1565c0; --blue-900: #0d47a1;
+  --navy: #061a38;
+  --white: #ffffff;
+
+  --bg: var(--navy);
+  --text: var(--white);
+  --muted: var(--blue-100);
+  --faint: var(--blue-200);
+  --line: rgba(144, 202, 249, 0.16);
   --glass-border: var(--line);
-  --surface: #161920;
-  --surface-2: rgba(255, 255, 255, 0.04);
+  --surface: #0a2550;
+  --surface-2: rgba(144, 202, 249, 0.06);
 
-  --brand-1: #d5d915;
-  --brand-2: #76d306;
-  --brand: #8fff06;
-  --brand-grad: linear-gradient(135deg, var(--brand-1) 0%, var(--brand-2) 60%);
+  --brand-1: var(--blue-400);
+  --brand-2: var(--blue-800);
+  --brand: var(--blue-300);
+  --brand-grad: linear-gradient(135deg, var(--blue-400) 0%, var(--blue-800) 100%);
+  --on-brand: var(--white);            /* text on --brand-grad and blue fills */
 
-  --upcoming: #e6a734;
-  --final: #34d399;
-  --live: #10b981;
-  --loss: #ef4444;
-  --draw: #9ca3af;
-  --gold: linear-gradient(135deg, #f59e0b, #fbbf24, #fef08a);
-  --gold-solid: #fbbf24;
+  /* Match states: blues and white only (the pill text and dot carry the meaning) */
+  --upcoming: var(--blue-400);
+  --final: var(--blue-200);
+  --live: var(--white);
+  --loss: var(--blue-400);
+  --draw: var(--blue-200);
+  --gold: linear-gradient(135deg, var(--blue-50), var(--white), var(--blue-100));
+  --gold-solid: var(--white);
 
-  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Oswald', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --r-lg: 20px;
   --r-md: 14px;
   --r-sm: 10px;
@@ -38,7 +47,7 @@ html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; font-family: var(--font); font-weight: 500; line-height: 1.5;
   color: var(--text); min-height: 100vh;
-  background: radial-gradient(1200px 500px at 50% -200px, rgba(118,211,6,.08), transparent 70%), var(--bg); overflow-x: hidden;
+  background: radial-gradient(1200px 500px at 50% -200px, rgba(66,165,245,.14), transparent 70%), var(--bg); overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 a { color: inherit; }
@@ -64,7 +73,7 @@ button, input, select { font: inherit; color: inherit; }
 /* ---------- Top bar (every page) ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 30;
-  background: rgba(15, 17, 21, .88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(6, 26, 56, .9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
   padding-top: env(safe-area-inset-top);
 }
@@ -83,7 +92,7 @@ button, input, select { font: inherit; color: inherit; }
   min-height: 36px; display: inline-flex; align-items: center;
 }
 .nav a:hover { color: var(--text); background: var(--surface-2); }
-.nav a[aria-current="page"] { background: var(--brand-grad); color: #0f1115; }
+.nav a[aria-current="page"] { background: var(--brand-grad); color: var(--on-brand); }
 /* Five nav links: the full league name and roomy links only once there's space for them. */
 @media (min-width: 480px) and (max-width: 559px) { .nav a { padding: 8px 7px; font-size: .8rem; } }
 @media (min-width: 560px) and (max-width: 799px) { .nav a { padding: 8px 10px; } }
@@ -102,11 +111,11 @@ button, input, select { font: inherit; color: inherit; }
 .topbar-inner .nav { margin-left: auto; }
 .mgr-btn {
   display: inline-flex; align-items: center; gap: 7px; flex: none; min-height: 36px; padding: 7px 14px; border-radius: 999px; text-decoration: none;
-  font-size: .85rem; font-weight: 800; color: var(--brand); border: 1.5px solid rgba(143,255,6,.55); background: rgba(143,255,6,.08);
+  font-size: .85rem; font-weight: 800; color: var(--brand); border: 1.5px solid rgba(100,181,246,.55); background: rgba(100,181,246,.08);
 }
 .mgr-btn svg { width: 17px; height: 17px; }
-.mgr-btn:hover { background: rgba(143,255,6,.16); }
-.mgr-btn[aria-current="page"] { background: var(--brand-grad); color: #0f1115; border-color: transparent; }
+.mgr-btn:hover { background: rgba(100,181,246,.16); }
+.mgr-btn[aria-current="page"] { background: var(--brand-grad); color: var(--on-brand); border-color: transparent; }
 @media (max-width: 799px) { .mgr-btn span { display: none; } .mgr-btn { padding: 0; width: 36px; justify-content: center; } }
 @media (max-width: 479px) { .brand b { display: none; } }
 /* Five nav links + the Managers button on small phones. Below 375px the logo gives way (Matches is the home page). */
@@ -117,12 +126,14 @@ button, input, select { font: inherit; color: inherit; }
 .hero {
   display: flex; align-items: center; justify-content: space-between; gap: 20px;
   border-radius: var(--r-lg); padding: 24px 20px; overflow: hidden; border: 1px solid var(--line);
-  background: linear-gradient(90deg, rgba(10,12,16,.94) 0%, rgba(10,12,16,.78) 50%, rgba(10,12,16,.45)), url('../assets/league/title.jpg') center / cover no-repeat;
+  background: linear-gradient(90deg, rgba(6,26,56,.95) 0%, rgba(6,26,56,.8) 50%, rgba(13,71,161,.45)), url('../assets/league/title.jpg') center / cover no-repeat;
+  /* The stadium photo is shown in the league's blues only (no green pitch). */
+  background-color: var(--blue-800); background-blend-mode: normal, luminosity;
 }
 .hero-text { min-width: 0; }
 .hero-logo { display: none; width: 112px; height: 112px; object-fit: contain; filter: drop-shadow(0 10px 30px rgba(0,0,0,.6)); flex: none; }
 .hero-facts { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
-.hero-facts > div { padding: 8px 14px; border-radius: var(--r-sm); background: rgba(0,0,0,.4); border: 1px solid var(--line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.hero-facts > div { padding: 8px 14px; border-radius: var(--r-sm); background: rgba(6,26,56,.55); border: 1px solid var(--line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .hero-facts b { display: block; font-size: 1.15rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .hero-facts b small { font-size: .75rem; color: var(--muted); font-weight: 700; }
 .hero-facts span { font-size: .66rem; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
@@ -135,12 +146,12 @@ button, input, select { font: inherit; color: inherit; }
 }
 .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .72rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--brand); }
 .hero h1 { margin: 4px 0 6px; font-size: clamp(1.7rem, 6vw, 2.6rem); font-weight: 800; letter-spacing: -.6px; line-height: 1.1; }
-.hero p { margin: 0; color: #d1d5db; font-size: .92rem; }
+.hero p { margin: 0; color: var(--blue-50); font-size: .92rem; }
 .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: livePulse 1.6s infinite ease-in-out; flex: none; }
 
 .notice {
   border-radius: var(--r-md); padding: 10px 16px; font-size: .85rem; font-weight: 600; text-align: center;
-  background: rgba(230,167,52,.1); border: 1px solid rgba(230,167,52,.3); color: #f5c46b;
+  background: rgba(66,165,245,.12); border: 1px solid rgba(100,181,246,.35); color: var(--blue-50);
 }
 
 /* ---------- Cards ---------- */
@@ -170,6 +181,9 @@ button, input, select { font: inherit; color: inherit; }
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
 .pill .pulse { width: 6px; height: 6px; }
+/* LIVE is the white accent; postponed and unconfirmed are outlined (no red: docs/BRAND.md). */
+.pill-live { background: var(--white); color: var(--navy); }
+.pill-postponed, .pill-tba { background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
 .countdown { font-size: .72rem; font-weight: 700; color: var(--upcoming); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------- Week tabs ---------- */
@@ -180,7 +194,7 @@ button, input, select { font: inherit; color: inherit; }
   color: var(--muted); font-weight: 700; font-size: .84rem; cursor: pointer;
 }
 .tab:hover { color: var(--text); }
-.tab[aria-selected="true"] { background: var(--brand-grad); color: #0f1115; border-color: transparent; }
+.tab[aria-selected="true"] { background: var(--brand-grad); color: var(--on-brand); border-color: transparent; }
 
 /* ---------- Match list (grouped by day) ---------- */
 .match-list { display: grid; gap: 18px; }
@@ -204,7 +218,7 @@ button, input, select { font: inherit; color: inherit; }
 .m-mid small { font-size: .68rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .score { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 1.1rem; padding: 3px 10px; border-radius: 8px; background: rgba(255,255,255,.08); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .score i { font-style: normal; color: var(--faint); font-weight: 600; }
-.match.is-live .score { background: color-mix(in srgb, var(--live) 22%, transparent); color: #6ee7b7; }
+.match.is-live .score { background: var(--white); color: var(--navy); }
 .live-note { display: inline-flex; align-items: center; gap: 5px; color: var(--live); font-variant-numeric: tabular-nums; }
 .live-note .pulse { width: 6px; height: 6px; }
 .kick { font-weight: 800; font-size: 1rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -219,7 +233,7 @@ button, input, select { font: inherit; color: inherit; }
 .ladder { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .88rem; }
 .ladder th { font-size: .68rem; letter-spacing: .5px; color: var(--muted); font-weight: 800; padding: 0 4px 8px; text-align: center; }
 .ladder td { padding: 8px 4px; text-align: center; border-top: 1px solid var(--line); }
-.ladder tr.cut td { border-bottom: 2px dashed rgba(143,255,6,.35); }
+.ladder tr.cut td { border-bottom: 2px dashed rgba(100,181,246,.45); }
 .ladder .pos { width: 34px; font-weight: 900; }
 .ladder .pos small { display: block; font-size: .6rem; font-weight: 800; line-height: 1; }
 .ladder .up { color: var(--final); } .ladder .down { color: var(--loss); }
@@ -238,8 +252,8 @@ button, input, select { font: inherit; color: inherit; }
   .ladder-full .t small { max-width: none; }
 }
 .form-dots { display: flex; gap: 3px; justify-content: center; }
-.form-dots i { width: 18px; height: 18px; border-radius: 5px; font-style: normal; font-size: .62rem; font-weight: 900; display: grid; place-items: center; color: #0f1115; }
-.form-dots .W { background: var(--final); } .form-dots .D { background: #4b5563; color: #fff; } .form-dots .L { background: var(--loss); color: #fff; }
+.form-dots i { width: 18px; height: 18px; border-radius: 5px; font-style: normal; font-size: .62rem; font-weight: 900; display: grid; place-items: center; color: var(--on-brand); }
+.form-dots .W { background: var(--blue-400); color: var(--navy); } .form-dots .D { background: var(--blue-800); color: var(--white); } .form-dots .L { background: transparent; color: var(--blue-100); box-shadow: inset 0 0 0 1.5px var(--blue-700); }
 .legend { font-size: .74rem; color: var(--faint); margin: 12px 0 0; }
 /* Single-column tablets have room for form and full names. */
 @media (min-width: 620px) and (max-width: 959px) {
@@ -266,14 +280,14 @@ button, input, select { font: inherit; color: inherit; }
   position: fixed; z-index: 70; left: 50%; top: calc(10px + env(safe-area-inset-top));
   width: min(560px, calc(100% - 20px)); transform: translate(-50%, -140%); transition: transform .35s cubic-bezier(.16,1,.3,1);
   display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 16px;
-  background: #1b2210; border: 1px solid rgba(143,255,6,.45); box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 0 0 4px rgba(143,255,6,.08);
+  background: var(--blue-900); border: 1px solid rgba(144,202,249,.45); box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 0 0 4px rgba(100,181,246,.1);
 }
 .update-toast.in { transform: translate(-50%, 0); }
 .update-icon { font-size: 1.4rem; flex: none; }
 .update-text { min-width: 0; flex: 1; line-height: 1.3; }
 .update-text b { display: block; font-size: .92rem; font-weight: 800; }
-.update-text span { font-size: .8rem; color: #cbd5a1; }
-.update-btn { flex: none; padding: 9px 16px; min-height: 40px; border: 0; border-radius: 999px; background: var(--brand-grad); color: #0f1115; font-weight: 800; font-size: .85rem; cursor: pointer; }
+.update-text span { font-size: .8rem; color: var(--blue-100); }
+.update-btn { flex: none; padding: 9px 16px; min-height: 40px; border: 0; border-radius: 999px; background: var(--brand-grad); color: var(--on-brand); font-weight: 800; font-size: .85rem; cursor: pointer; }
 .update-btn:hover { filter: brightness(1.08); }
 .update-close { flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .update-close:hover { background: rgba(255,255,255,.08); color: var(--text); }
@@ -293,14 +307,13 @@ button, input, select { font: inherit; color: inherit; }
 .viewers-eye { font-size: .8em; }
 #sb-viewers:empty { display: none; }
 #sb-viewers .viewers { margin: 6px 0 0; font-size: .8rem; }
-.hero-facts .fact-online b { display: flex; align-items: center; gap: 6px; color: #6ee7b7; }
+.hero-facts .fact-online b { display: flex; align-items: center; gap: 6px; color: var(--white); }
 .hero-facts .fact-online .pulse { width: 7px; height: 7px; color: var(--live); }
-.live-note .added { color: #8fff06; font-weight: 900; }
+.live-note .added { color: var(--white); font-weight: 900; }
 
 /* ---------- Press meters (js/press-view.js; docs/PRESS_EFFECT.md) ----------
-   Diverging colours, checked with the dataviz palette validator on --surface:
-   up #0f9f70, down #ec4a44, neutral #9ca3af. Every value also has ▲/▼ and a sign. */
-:root { --pm-up: #0f9f70; --pm-down: #ec4a44; --pm-flat: #9ca3af; }
+   vLeague blues (docs/BRAND.md): up white, down Blue 400, flat Blue 200. Every value also has ▲/▼ and a sign. */
+:root { --pm-up: var(--white); --pm-down: var(--blue-400); --pm-flat: var(--blue-200); }
 .pm { display: grid; gap: 10px; }
 .pm-title { margin: 0; font-size: .9rem; font-weight: 800; }
 .pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
@@ -323,3 +336,10 @@ button, input, select { font: inherit; color: inherit; }
 .pm-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .pm-chip { font-size: .72rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.06); font-variant-numeric: tabular-nums; }
 .pm-chip.up { color: var(--pm-up); } .pm-chip.down { color: var(--pm-down); } .pm-chip.flat { color: var(--pm-flat); }
+
+/* ---------- vLeague display type (Oswald): the name, headings, scores ---------- */
+.brand b, .hero h1, .page-head h1, .card-title, .score, .pm-value, .stage-tag { font-family: var(--font-display); }
+.brand b { font-weight: 700; letter-spacing: .02em; }
+.hero h1, .page-head h1 { font-weight: 700; letter-spacing: .01em; text-transform: uppercase; }
+.hero h1.hero-name { text-transform: none; font-size: clamp(2.4rem, 9vw, 3.6rem); line-height: 1; }   /* vLEAGUE keeps its lowercase v */
+.score { font-weight: 700; letter-spacing: .02em; }

@@ -234,7 +234,7 @@ export async function parseMatchBlob(blob, gz) {
   const isGz = gz || (bytes[0] === 0x1f && bytes[1] === 0x8b);
   const text = isGz ? await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text() : await blob.text();
   const data = JSON.parse(text);
-  if (data.format !== 'hcl-match') throw new Error('This is not an HCL match file');
+  if (data.format !== 'hcl-match') throw new Error('This is not a vLeague match file');
   return data;
 }
 

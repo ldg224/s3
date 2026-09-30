@@ -1,5 +1,5 @@
 /**
- * HCL manager relay (Google Apps Script web app).
+ * vLeague manager relay (Google Apps Script web app).
  *
  * The public website can't hold a GitHub key safely, so managers' saves come here instead.
  * This script checks the manager's email + PIN against the hash the league admin published
@@ -23,7 +23,7 @@ var FORMATIONS = {
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'ping') return reply(presence(e.parameter));
-  return reply({ ok: true, service: 'HCL manager relay' });
+  return reply({ ok: true, service: 'vLeague manager relay' });
 }
 
 function doPost(e) {

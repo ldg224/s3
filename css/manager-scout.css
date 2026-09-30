@@ -3,9 +3,9 @@
 @media (min-width: 900px) { .sc-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
 .sc-form { display: flex; gap: 4px; }
 .sc-form i, .sc-res { font-style: normal; width: 24px; height: 24px; border-radius: 7px; display: inline-grid; place-items: center; font-size: .7rem; font-weight: 900; flex: none; }
-.sc-form .W, .sc-res.W { background: rgba(52, 211, 153, .18); color: var(--final); }
-.sc-form .D, .sc-res.D { background: rgba(156, 163, 175, .18); color: var(--draw); }
-.sc-form .L, .sc-res.L { background: rgba(239, 68, 68, .18); color: var(--loss); }
+.sc-form .W, .sc-res.W { background: #42a5f5; color: #fff; }
+.sc-form .D, .sc-res.D { background: #1565c0; color: #fff; }
+.sc-form .L, .sc-res.L { background: transparent; color: #bbdefb; box-shadow: inset 0 0 0 1.5px #64b5f6; }
 .sc-next { display: grid; gap: 2px; padding: 10px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font-size: .85rem; }
 .pitch2d .pslot:hover .shirt { transform: none; }
 
@@ -13,7 +13,7 @@
 .sc-slider > span { color: var(--muted); font-weight: 700; }
 .sc-slider > b { grid-column: 2; font-size: .78rem; }
 .sc-track { position: relative; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .08); }
-.sc-track i { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--brand); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px rgba(143, 255, 6, .2); }
+.sc-track i { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--brand); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px rgba(100, 181, 246, .25); }
 
 .sc-tips { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: .88rem; line-height: 1.45; }
 .sc-tips b { color: var(--text); }

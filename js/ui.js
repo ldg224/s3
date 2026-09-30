@@ -44,7 +44,7 @@ export const STATUS = {
 };
 export function statusPill(st) {
   const s = STATUS[st] || STATUS.tba;
-  return `<span class="pill" style="--pc:${s.colour}">${st === 'live' ? '<span class="pulse"></span>' : ''}${s.label}</span>`;
+  return `<span class="pill pill-${STATUS[st] ? st : 'tba'}" style="--pc:${s.colour}">${st === 'live' ? '<span class="pulse"></span>' : ''}${s.label}</span>`;
 }
 
 // Saved timestamps are UTC without a zone ("2026-09-29T07:26:48"); read them as UTC.

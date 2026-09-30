@@ -669,7 +669,7 @@ let pendingFile = null;   // { data, blob }
 
 function uploadTab(body) {
   body.innerHTML = `<div class="ed-section"><h3>Upload a match file</h3>
-    <p class="ed-hint">Use a match file from the HCL simulator (.json or .json.gz). It's attached to a fixture; the result stays hidden until that fixture's kick-off time.</p>
+    <p class="ed-hint">Use a match file from the vLeague simulator (.json or .json.gz). It's attached to a fixture; the result stays hidden until that fixture's kick-off time.</p>
     <label class="drop" id="drop"><strong>Drop a match file here</strong>or click to choose<input type="file" accept=".json,.gz,application/json" hidden></label>
     <div id="upl"></div></div>`;
   const drop = body.querySelector('#drop'), input = drop.querySelector('input');
@@ -741,7 +741,7 @@ async function attachMatch(f, d) {
 }
 
 // ---------- Simulate ----------
-// Runs the HCL match simulator in this browser (js/simulate.js) and attaches the result.
+// Runs the vLeague match simulator in this browser (js/simulate.js) and attaches the result.
 
 const unplayed = () => draft.fixtures.filter(f => !f.result && !f.postponed && f.home && f.away).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
 
@@ -1208,7 +1208,7 @@ function teamsTab(body) {
       <div class="ed-row"><label class="ed-field" style="width:90px">Code<input class="ed-input" id="nt-code" maxlength="4" placeholder="ABC"></label>
         <label class="ed-field" style="flex:1 1 160px">Team name<input class="ed-input" id="nt-name"></label>
         <label class="ed-field" style="flex:1 1 140px">Manager<input class="ed-input" id="nt-man"></label>
-        <label class="ed-field">Colour<input type="color" id="nt-col" value="#34d399"></label>
+        <label class="ed-field">Colour<input type="color" id="nt-col" value="#1e88e5"></label>
         <button class="ed-btn small primary" style="align-self:end" id="nt-add">Add team</button></div></div></details></div>
     <div class="ed-section"><h3>Ask every manager</h3>
       ${qsFor('all').map(q => `<div class="q-row"><span>${esc(q.q)}</span><button class="ed-btn small danger" data-act="del-q" data-q="${esc(q.id)}" aria-label="Delete question">✕</button></div>`).join('')}
@@ -1247,7 +1247,7 @@ function teamsTab(body) {
       const salt = newSalt();
       draft.managers = { ...(draft.managers || {}), [t.code]: { salt, hash: await loginHash(salt, email, pin), set: new Date().toISOString().slice(0, 10) } };
       refresh();
-      const note = `Heineken C League Manager Hub login for ${t.name}\nSign in at: ${new URL('manager.html', location.href).href}\nEmail: ${email}\nPIN: ${pin}`;
+      const note = `vLeague Manager Hub login for ${t.name}\nSign in at: ${new URL('manager.html', location.href).href}\nEmail: ${email}\nPIN: ${pin}`;
       await info({ title: `Login saved for ${t.name}`, copy: note,
         html: `<p>Send these to the manager now. They <b>can't be viewed again</b>: only a scrambled check is stored.</p><pre class="ed-copy">${esc(note)}</pre>` });
     }

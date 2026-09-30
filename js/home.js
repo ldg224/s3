@@ -93,7 +93,7 @@ function renderNews() {
 function renderAll() {
   T = teamMap(S);
   $('#season-label').textContent = `Season ${S.season}`;
-  $('#hero-eyebrow').textContent = `Season ${S.season}`;
+  $('#hero-eyebrow').textContent = `Season ${S.season} · Virtual football`;
   const n = $('#notice');
   n.hidden = !S.notice;
   n.textContent = S.notice || '';

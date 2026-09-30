@@ -112,8 +112,8 @@ const BLOCKS = [['embed', 'Embed'], ['table', 'League table'], ['fixtures', 'Fix
 
 // ---------- New posts and templates ----------
 
-const embed = (o = {}) => ({ type: 'embed', colour: '#5865f2', author: { name: 'HCL Admin', icon: 'assets/league/logo.png', url: '' }, title: '', url: '', description: '',
-  fields: [], thumbnail: '', image: '', footer: { text: 'Heineken C League', icon: '' }, timestamp: true, buttons: [], ...o });
+const embed = (o = {}) => ({ type: 'embed', colour: '#1e88e5', author: { name: 'vLeague', icon: 'assets/league/logo.png', url: '' }, title: '', url: '', description: '',
+  fields: [], thumbnail: '', image: '', footer: { text: 'vLeague', icon: '' }, timestamp: true, buttons: [], ...o });
 const block = type => ({
   embed: () => embed(),
   table: () => ({ type: 'table', title: 'League table', rows: 0 }),
@@ -131,7 +131,7 @@ const PRESETS = {
     post: () => ({
       visibility: 'managers', ack: false,
       due: { date: inDays(7), time: '18:00' },
-      blocks: [embed({ colour: '#f5c518', title: 'Season 3 team registration',
+      blocks: [embed({ colour: '#1e88e5', title: 'Season 1 team registration',
         description: 'Hi **{manager}**, please confirm {team}’s details for the new season by **{due}**.\n\nAnything you change here (name, colours, logo) is updated once the league admin approves it.' })],
       form: { kind: 'registration', intro: '', submit: 'Submit registration', edit_after_submit: true, review: true, questions: [
         question({ type: 'short', label: 'Team name', required: true, maxlen: 40, map: 'team.name' }),
@@ -144,9 +144,9 @@ const PRESETS = {
       ] },
     }),
   },
-  matchday: { name: 'Matchday preview', post: () => ({ visibility: 'public', blocks: [embed({ colour: '#22c55e', title: 'Matchday preview', description: 'This week’s fixtures. Good luck to every team!' }), block('fixtures')()] }) },
-  table: { name: 'Table update', post: () => ({ visibility: 'public', blocks: [embed({ colour: '#38bdf8', title: 'Where the table stands', description: '' }), block('table')()] }) },
-  poll: { name: 'Poll', post: () => ({ blocks: [embed({ colour: '#a855f7', title: 'Have your say', description: 'One vote per team. Votes are final.' }), block('poll')()] }) },
+  matchday: { name: 'Matchday preview', post: () => ({ visibility: 'public', blocks: [embed({ colour: '#42a5f5', title: 'Matchday preview', description: 'This week’s fixtures. Good luck to every team!' }), block('fixtures')()] }) },
+  table: { name: 'Table update', post: () => ({ visibility: 'public', blocks: [embed({ colour: '#64b5f6', title: 'Where the table stands', description: '' }), block('table')()] }) },
+  poll: { name: 'Poll', post: () => ({ blocks: [embed({ colour: '#1565c0', title: 'Have your say', description: 'One vote per team. Votes are final.' }), block('poll')()] }) },
   form: { name: 'Custom form', post: () => ({ blocks: [embed({ title: 'Form title', description: 'Tell managers what this is for.' })],
     form: { kind: 'custom', intro: '', submit: 'Submit', edit_after_submit: true, review: false, questions: [question({ label: 'Your question', required: true })] } }) },
   blank: { name: 'Blank post', post: () => ({ blocks: [] }) },
@@ -350,7 +350,7 @@ function listView(S, ctx) {
     const list = posts(S).filter(p => p.status === status).sort(order);
     return list.length ? `<div class="ed-sub"><h4>${title} <span class="ed-hint">${hint}</span></h4><div class="na-list">${list.map(p => `
       <article class="na-item" data-id="${esc(p.id)}">
-        <span class="na-bar" style="background:${esc(p.blocks.find(b => b.type === 'embed')?.colour || '#5865f2')}"></span>
+        <span class="na-bar" style="background:${esc(p.blocks.find(b => b.type === 'embed')?.colour || '#1e88e5')}"></span>
         <div class="na-item-main"><div class="na-item-top">${chip(p)}${p.pinned ? '<span class="fx-chip ready">📌 Pinned</span>' : ''}<b>${esc(titleOf(p))}</b></div>
           <div class="ed-hint">${summaryLine(S, p, esc)}</div></div>
         <div class="na-item-act"><button class="ed-btn small primary" data-act="open">${p.status === 'draft' ? 'Edit' : 'Open'}</button></div>
@@ -451,7 +451,7 @@ function blockEditor(S, p, b, i, n, esc) {
     const buttons = (b.buttons || []).map((x, j) => `<div class="na-row na-sub">${field('Label', txt(esc, `${P}.buttons.${j}.label`, x.label))}${field('Link', txt(esc, `${P}.buttons.${j}.url`, x.url, 'https://… or manager.html'))}
         ${field('Style', `<select class="ed-select" data-path="${P}.buttons.${j}.style">${['primary', 'secondary', 'link'].map(s => `<option${x.style === s ? ' selected' : ''}>${s}</option>`).join('')}</select>`)}${mover(`button-${i}`, j, b.buttons.length, 'button')}</div>`).join('');
     return card(key, `Embed ${i + 1}`, esc(b.title || b.description?.slice(0, 40) || 'empty'), `
-      <div class="na-row">${field('Colour', `<input type="color" class="na-colour" data-path="${P}.colour" value="${esc(b.colour || '#5865f2')}">`, 'narrow')}${field('Author', txt(esc, `${P}.author.name`, b.author?.name, 'HCL Admin'))}</div>
+      <div class="na-row">${field('Colour', `<input type="color" class="na-colour" data-path="${P}.colour" value="${esc(b.colour || '#1e88e5')}">`, 'narrow')}${field('Author', txt(esc, `${P}.author.name`, b.author?.name, 'vLeague'))}</div>
       <div class="na-row">${img(esc, `${P}.author.icon`, b.author?.icon, 'Author icon')}${field('Author link', txt(esc, `${P}.author.url`, b.author?.url, 'https://…'))}</div>
       ${field('Title', txt(esc, `${P}.title`, b.title, 'Big bold heading'))}
       ${field('Title link', txt(esc, `${P}.url`, b.url, 'https://… (optional)'))}

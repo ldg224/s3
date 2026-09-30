@@ -19,7 +19,7 @@ let scouted = null;            // team code being scouted (null = next opponent)
 
 const surname = p => (p.name || '').trim().split(/\s+/).slice(-1)[0];
 const shirt = p => String(p.id).slice(-2);
-const ratingColour = r => (!r ? 'var(--muted)' : r >= 7.5 ? '#34d399' : r >= 6.5 ? '#fbbf24' : '#f87171');
+const ratingColour = r => (!r ? 'var(--muted)' : r >= 7.5 ? '#ffffff' : r >= 6.5 ? '#90caf9' : '#42a5f5');
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const perGame = (n, g) => (g ? (n / g).toFixed(2) : '–');
 const minuteOf = m => parseInt(String(m), 10) || 0;

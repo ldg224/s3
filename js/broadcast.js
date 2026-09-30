@@ -294,21 +294,21 @@ export class BroadcastRenderer extends HighlightsRenderer {
   replayTag(local, sh) {
     const c = this.c, a = seg01(local, 0.2, 0.6);
     c.save(); c.globalAlpha = a;
-    this.pill(W - 290, 52, 220, 56, 'rgba(15,17,21,0.88)', 12);
+    this.pill(W - 290, 52, 220, 56, 'rgba(6,26,56,0.88)', 12);
     c.fillStyle = LIME; c.beginPath(); c.arc(W - 258, 80, 9, 0, Math.PI * 2); c.fill();
     this.text('REPLAY', W - 236, 91, { size: 30, weight: 900, spacing: 4 });
     const e = sh.e, what = e.type === 'goal' ? `GOAL · ${lastName(this.names[e.scorer]).toUpperCase()}`
       : e.outcome === 'woodwork' ? `OFF THE WOODWORK · ${lastName(this.names[e.player]).toUpperCase()}`
       : e.outcome === 'saved' ? `GREAT SAVE · ${this.keeperName(e)}` : `SO CLOSE · ${lastName(this.names[e.player]).toUpperCase()}`;
-    c.font = `900 26px Inter, system-ui, sans-serif`;
+    c.font = `700 26px Oswald, Figtree, system-ui, sans-serif`;
     const w = c.measureText(what).width + 90, x = 70, y = H - 150;
     this.pill(x, y, 110, 54, this.limeGrad(x, y, x + 110, y + 54), 10);
-    this.text(`${e.minute}'`, x + 55, y + 38, { size: 30, weight: 900, align: 'center', colour: DARK });
-    this.pill(x + 120, y, w, 54, 'rgba(15,17,21,0.88)', 10);
+    this.text(`${e.minute}'`, x + 55, y + 38, { size: 30, weight: 900, align: 'center', colour: '#fff' });
+    this.pill(x + 120, y, w, 54, 'rgba(6,26,56,0.88)', 10);
     c.fillStyle = e.team === this.home.code ? this.hc : this.ac; c.fillRect(x + 120, y, 6, 54);
     this.text(what, x + 142, y + 37, { size: 26, weight: 900, spacing: 2 });
     c.restore();
-    c.fillStyle = 'rgba(143,255,6,0.9)'; c.fillRect(0, 0, W, 5); c.fillRect(0, H - 5, W, 5);
+    c.fillStyle = 'rgba(66,165,245,0.9)'; c.fillRect(0, 0, W, 5); c.fillRect(0, H - 5, W, 5);
   }
 
   // "1ST HALF · KICK-OFF" tag at the start of each half.
@@ -318,8 +318,8 @@ export class BroadcastRenderer extends HighlightsRenderer {
     const x = 70 - (1 - easeOut(a)) * 60, y = H - 150, half = ps.period === 1 ? '1ST HALF' : ps.period === 2 ? '2ND HALF' : `PERIOD ${ps.period}`;
     c.save(); c.globalAlpha = a;
     this.pill(x, y, 190, 54, this.limeGrad(x, y, x + 190, y + 54), 10);
-    this.text(half, x + 95, y + 37, { size: 26, weight: 900, align: 'center', colour: DARK, spacing: 2 });
-    this.pill(x + 200, y, 230, 54, 'rgba(15,17,21,0.88)', 10);
+    this.text(half, x + 95, y + 37, { size: 26, weight: 900, align: 'center', colour: '#fff', spacing: 2 });
+    this.pill(x + 200, y, 230, 54, 'rgba(6,26,56,0.88)', 10);
     this.text('KICK-OFF', x + 222, y + 37, { size: 26, weight: 900, spacing: 4 });
     c.restore();
   }
@@ -330,7 +330,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
     c.save(); c.translate(x, 0); c.transform(1, 0, -0.35, 1, 0, 0);
     c.fillStyle = DARK; c.fillRect(0, 0, W * 0.9, H);
     c.fillStyle = this.limeGrad(0, 0, 140, 0); c.fillRect(-60, 0, 60, H);
-    c.fillStyle = 'rgba(143,255,6,0.35)'; c.fillRect(-110, 0, 22, H);
+    c.fillStyle = 'rgba(66,165,245,0.35)'; c.fillRect(-110, 0, 22, H);
     c.restore();
     if (this.A.league && Math.abs(k - 0.5) < 0.3) { c.save(); c.globalAlpha = 1 - Math.abs(k - 0.5) / 0.3; c.drawImage(this.A.league, W / 2 - 80, H / 2 - 80, 160, 160); c.restore(); }
   }
@@ -338,7 +338,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
   // Score bug with the match clock (top left) and the league mark (bottom right).
   bug(t) {
     const c = this.c, sc = this.scoreAt(t), x = 60, y = 50, h = 64;
-    c.save(); c.shadowColor = 'rgba(0,0,0,.4)'; c.shadowBlur = 20; this.pill(x, y, 560, h, 'rgba(15,17,21,0.9)', 14); c.restore();
+    c.save(); c.shadowColor = 'rgba(0,0,0,.4)'; c.shadowBlur = 20; this.pill(x, y, 560, h, 'rgba(6,26,56,0.9)', 14); c.restore();
     if (this.A.league) c.drawImage(this.A.league, x + 12, y + 10, 44, 44);
     c.fillStyle = this.hc; c.fillRect(x + 70, y + 12, 6, 40);
     this.text(this.home.code, x + 88, y + 44, { size: 32, weight: 900 });
@@ -347,7 +347,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
     this.text(this.away.code, x + 322, y + 44, { size: 32, weight: 900 });
     c.fillStyle = this.ac; c.fillRect(x + 408, y + 12, 6, 40);
     this.pill(x + 428, y + 12, 120, 40, this.limeGrad(x + 428, y, x + 548, y), 10);
-    this.text(t >= this.t1 ? 'FT' : this.clockAt(t), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: DARK });
+    this.text(t >= this.t1 ? 'FT' : this.clockAt(t), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: '#fff' });
     if (t < this.t1) this.addedBoard(x, y, t);
     if (this.A.league) { c.globalAlpha = 0.75; c.drawImage(this.A.league, W - 110, H - 110, 60, 60); c.globalAlpha = 1; }
   }
@@ -356,7 +356,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
   momentPanel(label, sc, a, scorers) {
     const c = this.c;
     c.save(); c.globalAlpha = a;
-    c.fillStyle = 'rgba(8,10,14,0.62)'; c.fillRect(0, 0, W, H);
+    c.fillStyle = 'rgba(6,26,56,0.62)'; c.fillRect(0, 0, W, H);
     this.stripes(0, 0.35);
     const k = easeOut(a);
     this.text(label, W / 2, 330, { size: 50, weight: 900, align: 'center', colour: LIME, spacing: 12, shadow: 16 });

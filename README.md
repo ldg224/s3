@@ -1,6 +1,7 @@
-# Heineken C League: Season 3
+# vLeague: Season 1
 
-The Season 3 website: https://ldg224.github.io/s3/
+The vLeague Season 1 website: https://ldg224.github.io/s3/ (vLeague was the Heineken C League; this
+season was its Season 3). Brand rules: `docs/BRAND.md`.
 
 Plain HTML, CSS and JavaScript, no build step, hosted on GitHub Pages. League data lives in
 this repository (no spreadsheet) and is managed from the site's **edit mode**.

@@ -13,14 +13,14 @@ form (`data/uploads/<code>/`). Your GitHub key is kept inside the script, never 
 ## 1. Make a GitHub key for the script
 
 1. Open <https://github.com/settings/personal-access-tokens/new> (fine-grained token).
-2. Name: `HCL manager relay`. Expiration: the end of the season (or longer).
+2. Name: `vLeague manager relay`. Expiration: the end of the season (or longer).
 3. Repository access: **Only select repositories** → `ldg224/s3`.
 4. Permissions → Repository permissions → **Contents: Read and write**. Nothing else.
 5. Generate, and copy the token (it starts with `github_pat_`).
 
 ## 2. Create the script
 
-1. Open <https://script.google.com> and click **New project**. Name it `HCL manager relay`.
+1. Open <https://script.google.com> and click **New project**. Name it `vLeague manager relay`.
 2. Delete the sample code, and paste in everything from
    [`tools/manager-relay.gs`](../tools/manager-relay.gs).
 3. Click the save icon.
@@ -34,7 +34,7 @@ form (`data/uploads/<code>/`). Your GitHub key is kept inside the script, never 
 2. Click the gear next to "Select type" → **Web app**.
 3. Execute as: **Me**. Who has access: **Anyone**.
 4. Click **Deploy**, then **Authorize access** and allow it. (Google warns that the app
-   isn't verified: click **Advanced** → **Go to HCL manager relay**. It's your own script.)
+   isn't verified: click **Advanced** → **Go to vLeague manager relay**. It's your own script.)
 5. Copy the **Web app URL** (it ends in `/exec`).
 
 ## 4. Connect it to the site
@@ -54,7 +54,7 @@ The League news feature needs the new version of the script: it adds "Got it" re
 poll votes, form answers and image uploads. Until you update it, managers can still read news,
 but those buttons show an error.
 
-1. Open <https://script.google.com> → **HCL manager relay**.
+1. Open <https://script.google.com> → **vLeague manager relay** (called **HCL manager relay** if it was set up before the rebrand).
 2. Select all the code in `Code.gs` and delete it. Paste in everything from
    [`tools/manager-relay.gs`](../tools/manager-relay.gs), then click the save icon.
 3. **Deploy** → **Manage deployments** → click the pencil (edit) on the existing deployment →

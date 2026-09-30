@@ -187,7 +187,7 @@ function varsFor(season, post, opts) {
 }
 
 function embedBlock(b, post, season, opts, vars) {
-  const src = opts.src, colour = safeColour(b.colour || '#5865f2');
+  const src = opts.src, colour = safeColour(b.colour || '#1e88e5');
   const titleUrl = safeLink(b.url || '');
   const title = b.title ? (titleUrl ? `<a class="nw-title" href="${esc(titleUrl)}" target="_blank" rel="noopener noreferrer">${inline(esc(b.title))}</a>` : `<div class="nw-title">${inline(esc(b.title))}</div>`) : '';
   const authorUrl = safeLink(b.author?.url || '');
@@ -288,7 +288,7 @@ function questionHtml(q, value, season, opts, disabled) {
     case 'dropdown': input = `<select class="nw-input" name="${name}"${req}${dis}><option value="">Choose…</option>${opts2.map(o => `<option${value === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`; break;
     case 'checkbox': input = `<label class="nw-check"><input type="checkbox" name="${name}"${value === true ? ' checked' : ''}${dis}><span>Yes</span></label>`; break;
     case 'colour': {
-      const c = /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#8fff06';
+      const c = /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#64b5f6';
       input = `<span class="nw-colour"><input type="color" name="${name}" value="${esc(c)}"${dis}><code>${esc(value ? c : 'not set')}</code></span>`; break;
     }
     case 'image': {
@@ -350,7 +350,7 @@ function teaser(post, opts) {
   const link = `manager.html#news/${encodeURIComponent(post.id)}`;
   return `<article class="nw-post teaser" id="news-${esc(post.id)}" data-post="${esc(post.id)}">
     ${metaRow(post, opts)}
-    <div class="nw-embed" style="--ec:${esc(safeColour(e.colour || '#5865f2'))}">
+    <div class="nw-embed" style="--ec:${esc(safeColour(e.colour || '#1e88e5'))}">
       ${e.author?.name ? `<div class="nw-author">${img(e.author.icon, opts.src, 'class="nw-icon"')}<span>${esc(e.author.name)}</span></div>` : ''}
       <div class="nw-title">${inline(esc(e.title || 'League office update'))}</div>
       <p class="nw-teasertext">🔒 For team managers. <a href="${link}">View more information in your manager portal ›</a></p></div></article>`;

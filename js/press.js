@@ -39,7 +39,7 @@ function render() {
   const news = S.teams.filter(t => files[t.code]?.message && (filter === 'all' || filter === t.code));
   const when = d => (d ? new Date(d).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
   $('#mount').innerHTML = `<div class="stack">
-    <header class="page-head"><p class="eyebrow">Season 3</p><h1>Press room</h1><p>What the managers are saying.</p></header>
+    <header class="page-head"><p class="eyebrow">Season ${esc(S.season ?? 1)}</p><h1>Press room</h1><p>What the managers are saying.</p></header>
     <div class="chips"><button class="chip-btn" data-f="all" aria-pressed="${filter === 'all'}">All teams</button>${S.teams.map(t => `<button class="chip-btn" data-f="${esc(t.code)}" aria-pressed="${filter === t.code}">${esc(t.code)}</button>`).join('')}</div>
     ${metersCard()}
     ${news.length ? `<section class="card stack" style="gap:10px"><h2 class="card-title" style="margin:0">Team news</h2>${news.map(t => `<div class="qcard"><div class="chips" style="align-items:center">${logo(t, 26)}<b>${esc(t.name)}</b><span class="muted" style="font-size:.8rem">${esc(t.manager || '')}</span></div><div class="a">${esc(files[t.code].message)}</div></div>`).join('')}</section>` : ''}

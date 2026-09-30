@@ -57,7 +57,7 @@ Timestamps (`sent`, `updated`, `read`, `submitted`, `reviews[].at`) are UTC with
 
 ```json
 { "type": "embed", "colour": "#5865f2",
-  "author": { "name": "HCL Admin", "icon": "", "url": "" },
+  "author": { "name": "vLeague", "icon": "", "url": "" },
   "title": "", "url": "", "description": "markdown",
   "fields": [ { "name": "", "value": "markdown", "inline": true } ],
   "thumbnail": "", "image": "",

@@ -1,4 +1,4 @@
-// 2D top-down match replay drawn from an HCL match file (see the simulator's OUTPUT_FORMAT.md).
+// 2D top-down match replay drawn from a vLeague match file (see the simulator's OUTPUT_FORMAT.md).
 // In live mode playback is locked to real time, so viewers can't skip ahead of the "broadcast".
 
 import { onColour, safeColour } from './ui.js';
@@ -89,10 +89,10 @@ export class Replay {
       g.addColorStop(0, col); g.addColorStop(1, shade(col));
       c.fillStyle = g; c.fill();
       c.lineWidth = holder === k ? 3.5 : 1.5; c.strokeStyle = holder === k ? '#ffffff' : col; c.stroke();
-      c.fillStyle = onColour(col); c.font = '800 9px Inter, system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = onColour(col); c.font = '800 9px Figtree, system-ui'; c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText(p.slot.slice(0, 3), x, y + 0.5);
       if (holder === k) {
-        c.font = '700 12px Inter, system-ui'; c.fillStyle = '#fff';
+        c.font = '700 12px Figtree, system-ui'; c.fillStyle = '#fff';
         c.shadowColor = 'rgba(0,0,0,.8)'; c.shadowBlur = 4;
         c.fillText(p.name.split(' ').slice(-1)[0], x, y - 22);
         c.shadowBlur = 0;

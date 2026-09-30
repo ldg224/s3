@@ -10,8 +10,11 @@ import { kickoff } from './data.js';
 
 export const W = 1920, H = 1080, FPS = 30;
 const GOAL_Y1 = 30.34, GOAL_Y2 = 37.66, GOAL_H = 2.44;
-const LIME = '#8fff06', LIME2 = '#76d306', YEL = '#d5d915', DARK = '#0f1115';
-const FONT = 'Inter, system-ui, sans-serif';
+// vLeague brand (docs/BRAND.md): Material Blue ramp, white as the accent, navy background. The old
+// names stay so the graphics code reads the same: LIME = Blue 300 (accent text), YEL -> LIME2 = the
+// Blue 400 -> 800 button gradient (white text on it), DARK = navy.
+const LIME = '#64b5f6', LIME2 = '#1565c0', YEL = '#42a5f5', DARK = '#061a38';
+const FONT = 'Oswald, Figtree, system-ui, sans-serif';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -224,7 +227,7 @@ export class HighlightsRenderer {
   addedBoard(x, y, t) {
     const n = this.addedAt(t);
     if (!n) return;
-    this.pill(x + 450, y + 56, 76, 32, 'rgba(15,17,21,0.9)', 8);
+    this.pill(x + 450, y + 56, 76, 32, 'rgba(6,26,56,0.9)', 8);
     this.text(`+${n}`, x + 488, y + 81, { size: 22, weight: 900, align: 'center', colour: LIME });
   }
 
@@ -256,8 +259,10 @@ export class HighlightsRenderer {
     if (img) {
       const r = Math.max(W / img.width, H / img.height);
       c.drawImage(img, (W - img.width * r) / 2, (H - img.height * r) / 2, img.width * r, img.height * r);
+      // Blue duotone, so the stadium photo sits in the brand colours.
+      c.save(); c.globalCompositeOperation = 'color'; c.fillStyle = '#1565c0'; c.fillRect(0, 0, W, H); c.restore();
     }
-    c.fillStyle = `rgba(10,12,16,${tint})`; c.fillRect(0, 0, W, H);
+    c.fillStyle = `rgba(6,26,56,${tint})`; c.fillRect(0, 0, W, H);
     this.grid();
   }
   grid() {
@@ -289,7 +294,7 @@ export class HighlightsRenderer {
   pill(x, y, w, h, fill, r = h / 2) {
     const c = this.c; c.beginPath(); c.roundRect(x, y, w, h, r); c.fillStyle = fill; c.fill();
   }
-  limeGrad(x0, y0, x1, y1) { const g = this.c.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, YEL); g.addColorStop(0.6, LIME2); return g; }
+  limeGrad(x0, y0, x1, y1) { const g = this.c.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, YEL); g.addColorStop(1, LIME2); return g; }
 
   // ------------------------------------------------ cards
 
@@ -299,26 +304,26 @@ export class HighlightsRenderer {
     // Light sweep
     const sx = lerp(-600, W + 600, easeInOut(t / 2.2));
     const g = c.createLinearGradient(sx - 300, 0, sx + 300, 0);
-    g.addColorStop(0, 'rgba(143,255,6,0)'); g.addColorStop(0.5, 'rgba(143,255,6,0.16)'); g.addColorStop(1, 'rgba(143,255,6,0)');
+    g.addColorStop(0, 'rgba(66,165,245,0)'); g.addColorStop(0.5, 'rgba(66,165,245,0.16)'); g.addColorStop(1, 'rgba(66,165,245,0)');
     c.fillStyle = g; c.fillRect(0, 0, W, H);
     // Diagonal brand bars
     c.save(); c.translate(W / 2, H / 2); c.rotate(-0.35);
     for (let i = 0; i < 3; i++) {
       const w = lerp(0, W * 1.6, easeOut((t - 0.1 * i) / 0.9));
-      c.fillStyle = i === 1 ? this.limeGrad(-w / 2, 0, w / 2, 0) : `rgba(143,255,6,${0.08 + i * 0.04})`;
+      c.fillStyle = i === 1 ? this.limeGrad(-w / 2, 0, w / 2, 0) : `rgba(66,165,245,${0.08 + i * 0.04})`;
       c.fillRect(-w / 2, -260 + i * 170 + (i === 1 ? 70 : 0), w, i === 1 ? 14 : 60);
     }
     c.restore();
     const k = easeOut((t - 0.4) / 0.8);
     if (this.A.league) {
-      c.save(); c.shadowColor = 'rgba(143,255,6,0.6)'; c.shadowBlur = 60 * k;
+      c.save(); c.shadowColor = 'rgba(66,165,245,0.6)'; c.shadowBlur = 60 * k;
       const s = 260 * (0.6 + 0.4 * k); c.globalAlpha = k;
       c.drawImage(this.A.league, W / 2 - s / 2, H / 2 - 190 - s / 2 + 60, s, s); c.restore();
     }
     const a = easeOut((t - 1.0) / 0.7);
-    this.text('HEINEKEN C LEAGUE', W / 2, H / 2 + 150, { size: 84, weight: 900, align: 'center', spacing: 6 * a, alpha: a, shadow: 20 });
+    this.text('vLEAGUE', W / 2, H / 2 + 150, { size: 104, weight: 900, align: 'center', spacing: 6 * a, alpha: a, shadow: 20 });
     const b = easeOut((t - 1.5) / 0.7);
-    this.text(`SEASON ${this.season?.season ?? 3}  ·  WEEK ${this.fx?.week ?? this.d.match.week ?? ''}  ·  HIGHLIGHTS`, W / 2, H / 2 + 225, { size: 34, weight: 800, align: 'center', colour: LIME, spacing: 5, alpha: b });
+    this.text(`SEASON ${this.season?.season ?? 1}  ·  WEEK ${this.fx?.week ?? this.d.match.week ?? ''}  ·  HIGHLIGHTS`, W / 2, H / 2 + 225, { size: 34, weight: 800, align: 'center', colour: LIME, spacing: 5, alpha: b });
     this.fadeOut(t, 4.5, 0.35);
   }
 
@@ -333,7 +338,7 @@ export class HighlightsRenderer {
       else { c.moveTo(W, 0); c.lineTo(split + slant / 2 + 6, 0); c.lineTo(split - slant / 2 + 6, H); c.lineTo(W, H); }
       c.closePath(); c.clip();
       const g = c.createLinearGradient(side ? W : 0, 0, split, H);
-      g.addColorStop(0, col); g.addColorStop(1, '#0b0d11');
+      g.addColorStop(0, col); g.addColorStop(1, DARK);
       c.globalAlpha = 0.85; c.fillStyle = g; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
       this.stripes(t, 0.35);
       const team = side ? this.away : this.home, wm = this.A.logosAlt[team.code] || this.A.logos[team.code];
@@ -351,7 +356,7 @@ export class HighlightsRenderer {
     const v = easeOut((t - 0.5) / 0.5);
     c.save(); c.translate(W / 2, H / 2 - 60); c.scale(0.6 + 0.4 * v, 0.6 + 0.4 * v); c.globalAlpha = v;
     this.pill(-95, -95, 190, 190, this.limeGrad(-95, -95, 95, 95), 95);
-    this.text('VS', 0, 38, { size: 110, weight: 900, align: 'center', colour: DARK, italic: true });
+    this.text('VS', 0, 38, { size: 110, weight: 900, align: 'center', colour: '#fff', italic: true });
     c.restore();
     const k0 = kickoff(this.fx || {});
     const when = k0 ? k0.toLocaleString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
@@ -424,18 +429,18 @@ export class HighlightsRenderer {
     const team = p.team === this.home.code ? this.home : this.away;
     c.fillStyle = DARK; c.fillRect(0, 0, W, H);
     const g = c.createRadialGradient(W * 0.3, H / 2, 50, W * 0.3, H / 2, 900);
-    g.addColorStop(0, safeColour(team.colour)); g.addColorStop(1, '#0b0d11');
+    g.addColorStop(0, safeColour(team.colour)); g.addColorStop(1, DARK);
     c.globalAlpha = 0.55; c.fillStyle = g; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
     this.stripes(t, 0.4); this.grid();
     const k = easeOut(t / 0.7);
-    c.save(); c.shadowColor = 'rgba(245,158,11,.55)'; c.shadowBlur = 60; this.logoAt(team, W * 0.3 - (1 - k) * 300, H / 2, 420, k); c.restore();
-    const gold = c.createLinearGradient(0, 0, 600, 0); gold.addColorStop(0, '#f59e0b'); gold.addColorStop(0.5, '#fbbf24'); gold.addColorStop(1, '#fef08a');
+    c.save(); c.shadowColor = 'rgba(100,181,246,.55)'; c.shadowBlur = 60; this.logoAt(team, W * 0.3 - (1 - k) * 300, H / 2, 420, k); c.restore();
+    const gold = c.createLinearGradient(0, 0, 600, 0); gold.addColorStop(0, '#ffffff'); gold.addColorStop(1, '#bbdefb');   // was gold; white is the brand's accent
     this.text('PLAYER OF THE MATCH', W * 0.52, 360, { size: 40, weight: 900, colour: gold, spacing: 8, alpha: k });
     this.text(p.name.toUpperCase(), W * 0.52 + (1 - k) * 200, 470, { size: 92, weight: 900, italic: true, alpha: k, shadow: 20 });
     this.text(team.name.toUpperCase(), W * 0.52, 530, { size: 30, weight: 800, colour: 'rgba(255,255,255,.7)', spacing: 4, alpha: k });
     const b = easeOut((t - 0.6) / 0.6);
     this.pill(W * 0.52, 575, 200, 110, gold, 20);
-    this.text(s.rating.toFixed(1), W * 0.52 + 100, 655, { size: 72, weight: 900, align: 'center', colour: '#1a1205', alpha: b });
+    this.text(s.rating.toFixed(1), W * 0.52 + 100, 655, { size: 72, weight: 900, align: 'center', colour: DARK, alpha: b });
     const line = [s.goals && `${s.goals} goal${s.goals > 1 ? 's' : ''}`, s.assists && `${s.assists} assist${s.assists > 1 ? 's' : ''}`, `${s.passes_completed}/${s.passes} passes`, s.saves && `${s.saves} saves`, s.tackles_won && `${s.tackles_won} tackles won`].filter(Boolean).slice(0, 4).join('   ·   ');
     this.text(line, W * 0.52 + 240, 645, { size: 30, weight: 700, alpha: b });
   }
@@ -444,8 +449,8 @@ export class HighlightsRenderer {
     const c = this.c;
     this.bg(0.9);
     const k = easeOut(t / 0.8);
-    if (this.A.league) { c.save(); c.globalAlpha = k; c.shadowColor = 'rgba(143,255,6,.5)'; c.shadowBlur = 50; c.drawImage(this.A.league, W / 2 - 110, 240, 220, 220); c.restore(); }
-    this.text('HEINEKEN C LEAGUE', W / 2, 560, { size: 70, weight: 900, align: 'center', spacing: 6, alpha: k });
+    if (this.A.league) { c.save(); c.globalAlpha = k; c.shadowColor = 'rgba(66,165,245,.5)'; c.shadowBlur = 50; c.drawImage(this.A.league, W / 2 - 110, 240, 220, 220); c.restore(); }
+    this.text('vLEAGUE', W / 2, 560, { size: 90, weight: 900, align: 'center', spacing: 6, alpha: k });
     this.text('FULL MATCH REPLAY, LADDER AND STATS', W / 2, 640, { size: 30, weight: 800, align: 'center', colour: 'rgba(255,255,255,.7)', spacing: 4, alpha: easeOut((t - 0.5) / 0.6) });
     this.text('ldg224.github.io/s3', W / 2, 700, { size: 40, weight: 900, align: 'center', colour: LIME, alpha: easeOut((t - 0.8) / 0.6) });
     this.fadeOut(t, 4.5, 0.8);
@@ -653,8 +658,8 @@ export class HighlightsRenderer {
     // Letterbox bars and a "REF CAM" tag, like a broadcast's referee camera.
     c.fillStyle = 'rgba(0,0,0,0.85)'; c.fillRect(0, 0, W, 70); c.fillRect(0, H - 70, W, 70);
     const x = W - 330, y = 100;
-    this.pill(x, y, 270, 60, 'rgba(15,17,21,0.9)', 12);
-    if (Math.floor(local * 2) % 2 === 0) { c.fillStyle = '#ef4444'; c.beginPath(); c.arc(x + 34, y + 30, 10, 0, Math.PI * 2); c.fill(); }
+    this.pill(x, y, 270, 60, 'rgba(6,26,56,0.9)', 12);
+    if (Math.floor(local * 2) % 2 === 0) { c.fillStyle = '#ffffff'; c.beginPath(); c.arc(x + 34, y + 30, 10, 0, Math.PI * 2); c.fill(); }
     this.text('REF CAM', x + 58, y + 42, { size: 32, weight: 900, spacing: 4 });
     c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 3;
     for (const [cx, cy, sx, sy] of [[90, 110, 1, 1], [W - 90, 110 + 80, -1, 1], [90, H - 110, 1, -1], [W - 90, H - 110, -1, -1]]) {
@@ -669,7 +674,7 @@ export class HighlightsRenderer {
     const bh = p[1] - head[1], bw = Math.max(12, bh * 0.42), bx = p[0], top = head[1];
     const r = Math.max(10, p[2] * 0.6);
     c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(bx + r * 0.4, p[1], r * 1.05, r * 0.42, 0, 0, Math.PI * 2); c.fill();
-    const g = c.createLinearGradient(bx - bw, 0, bx + bw, 0); g.addColorStop(0, '#2b2f38'); g.addColorStop(1, '#0b0d11');
+    const g = c.createLinearGradient(bx - bw, 0, bx + bw, 0); g.addColorStop(0, '#2b2f38'); g.addColorStop(1, DARK);
     c.fillStyle = g; c.beginPath(); c.roundRect(bx - bw / 2, top + bh * 0.28, bw, bh * 0.72, bw / 2); c.fill();
     c.fillStyle = LIME; c.fillRect(bx - bw / 2, top + bh * 0.3, bw, Math.max(2, bh * 0.04));   // collar trim
     c.fillStyle = '#e8b894'; c.beginPath(); c.arc(bx, top + bh * 0.16, bw * 0.34, 0, Math.PI * 2); c.fill();
@@ -748,14 +753,14 @@ export class HighlightsRenderer {
   // (it used to be flat screen text that always faced the camera). From behind, only the back shows.
   drawBoards(cam) {
     const c = this.c, Y = -3, Z = 1, X0 = -5, X1 = 110, PANEL = 15;
-    this.quad(cam, [[X0, Y, 0], [X1, Y, 0], [X1, Y, Z], [X0, Y, Z]], '#0b0d11');
+    this.quad(cam, [[X0, Y, 0], [X1, Y, 0], [X1, Y, Z], [X0, Y, Z]], DARK);
     if (cam.C && cam.C[1] <= Y) return;   // behind the boards: their back is blank
-    for (let x = X0, i = 0; x < X1; x += PANEL, i++) this.boardPanel(cam, x, Math.min(X1, x + PANEL), Y, Z, i % 2 ? 'SEASON 3' : 'HEINEKEN C LEAGUE', i % 2 ? '#ffffff' : LIME);
+    for (let x = X0, i = 0; x < X1; x += PANEL, i++) this.boardPanel(cam, x, Math.min(X1, x + PANEL), Y, Z, ...(i % 2 ? ['VIRTUAL FOOTBALL', '#90caf9', DARK] : ['vLEAGUE', '#ffffff', '#1565c0']));
   }
   // One panel's artwork, drawn in thin vertical strips; each strip is an affine map of the image
   // onto the projected board, which together give the perspective.
-  boardPanel(cam, xa, xb, y, z, label, colour) {
-    const art = this.boardArt(label, colour, (xb - xa) / z), c = this.c, N = 14, sw = art.width / N;
+  boardPanel(cam, xa, xb, y, z, label, colour, back = DARK) {
+    const art = this.boardArt(label, colour, (xb - xa) / z, back), c = this.c, N = 14, sw = art.width / N;
     for (let k = 0; k < N; k++) {
       const x = xa + (xb - xa) * k / N, x2 = xa + (xb - xa) * (k + 1) / N;
       const tl = cam.p(x, y, z), tr = cam.p(x2, y, z), bl = cam.p(x, y, 0);
@@ -766,14 +771,14 @@ export class HighlightsRenderer {
       c.restore();
     }
   }
-  boardArt(label, colour, aspect) {
-    const key = `${label}|${colour}|${aspect}`;
+  boardArt(label, colour, aspect, back = DARK) {
+    const key = `${label}|${colour}|${aspect}|${back}`;
     this._boardArt ||= new Map();
     if (this._boardArt.has(key)) return this._boardArt.get(key);
     const h = 64, w = Math.round(h * aspect), cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
     const g = cv.getContext('2d');
-    g.fillStyle = '#0b0d11'; g.fillRect(0, 0, w, h);
+    g.fillStyle = back; g.fillRect(0, 0, w, h);
     g.fillStyle = colour; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = `900 ${Math.round(h * 0.62)}px ${FONT}`;
     g.fillText(label, w / 2, h / 2 + 2, w * 0.92);
@@ -838,7 +843,7 @@ export class HighlightsRenderer {
     if (holder) {
       const name = lastName(pl.name).toUpperCase(), fs = 24;
       c.font = `900 ${fs}px ${FONT}`; const w = c.measureText(name).width + 28;
-      this.pill(bx - w / 2, top - 46, w, 36, 'rgba(15,17,21,0.88)', 10);
+      this.pill(bx - w / 2, top - 46, w, 36, 'rgba(6,26,56,0.88)', 10);
       c.fillStyle = col; c.fillRect(bx - w / 2, top - 46, 6, 36);
       this.text(name, bx + 3, top - 20, { size: fs, weight: 900, align: 'center' });
     }
@@ -873,8 +878,8 @@ export class HighlightsRenderer {
       const x = 70 - (1 - easeOut(tagA)) * 60, y = H - 150;
       this.c.save(); this.c.globalAlpha = tagA;
       this.pill(x, y, 110, 54, this.limeGrad(x, y, x + 110, y + 54), 10);
-      this.text(`${ev.minute}'`, x + 55, y + 38, { size: 30, weight: 900, align: 'center', colour: DARK });
-      this.pill(x + 120, y, 360, 54, 'rgba(15,17,21,0.88)', 10);
+      this.text(`${ev.minute}'`, x + 55, y + 38, { size: 30, weight: 900, align: 'center', colour: '#fff' });
+      this.pill(x + 120, y, 360, 54, 'rgba(6,26,56,0.88)', 10);
       this.c.fillStyle = safeColour(team.colour); this.c.fillRect(x + 120, y, 6, 54);
       this.text(label, x + 142, y + 37, { size: 26, weight: 900, spacing: 3 });
       this.c.restore();
@@ -882,11 +887,11 @@ export class HighlightsRenderer {
     if (s.type === 'replay') {
       const a = seg01(local, 0.1, 0.5);
       this.c.save(); this.c.globalAlpha = a;
-      this.pill(W - 290, 52, 220, 56, 'rgba(15,17,21,0.88)', 12);
+      this.pill(W - 290, 52, 220, 56, 'rgba(6,26,56,0.88)', 12);
       this.c.fillStyle = LIME; this.c.beginPath(); this.c.arc(W - 258, 80, 9, 0, Math.PI * 2); this.c.fill();
       this.text('REPLAY', W - 236, 91, { size: 30, weight: 900, spacing: 4 });
       this.c.restore();
-      this.c.fillStyle = 'rgba(143,255,6,0.9)'; this.c.fillRect(0, 0, W, 5); this.c.fillRect(0, H - 5, W, 5);
+      this.c.fillStyle = 'rgba(66,165,245,0.9)'; this.c.fillRect(0, 0, W, 5); this.c.fillRect(0, H - 5, W, 5);
     }
     // Goal banner
     if (s.type === 'clip' && clip.kind === 'goal') {
@@ -943,7 +948,7 @@ export class HighlightsRenderer {
     c.save(); c.globalAlpha = a;
     c.font = `900 38px ${FONT}`; const w = c.measureText(text).width + 70 + (cardCol ? 50 : 0);
     const x = W / 2 - w / 2, y = H - 240;
-    this.pill(x, y, w, 76, 'rgba(15,17,21,0.9)', 14);
+    this.pill(x, y, w, 76, 'rgba(6,26,56,0.9)', 14);
     c.fillStyle = this.limeGrad(x, y, x + w, y); c.fillRect(x, y + 70, w * easeOut(t / 0.6), 6);
     if (cardCol) { c.fillStyle = cardCol; c.beginPath(); c.roundRect(x + 30, y + 14, 34, 48, 5); c.fill(); }
     this.text(text, W / 2 + (cardCol ? 25 : 0), y + 51, { size: 38, weight: 900, align: 'center' });
@@ -964,7 +969,7 @@ export class HighlightsRenderer {
     const x = 60, y = 50, h = 64;
     c.save();
     c.shadowColor = 'rgba(0,0,0,.4)'; c.shadowBlur = 20;
-    this.pill(x, y, 560, h, 'rgba(15,17,21,0.9)', 14);
+    this.pill(x, y, 560, h, 'rgba(6,26,56,0.9)', 14);
     c.restore();
     if (this.A.league) c.drawImage(this.A.league, x + 12, y + 10, 44, 44);
     c.fillStyle = this.hc; c.fillRect(x + 70, y + 12, 6, 40);
@@ -974,7 +979,7 @@ export class HighlightsRenderer {
     this.text(this.away.code, x + 322, y + 44, { size: 32, weight: 900 });
     c.fillStyle = this.ac; c.fillRect(x + 408, y + 12, 6, 40);
     this.pill(x + 428, y + 12, 120, 40, this.limeGrad(x + 428, y, x + 548, y), 10);
-    this.text(this.clockAt(tSim), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: DARK });
+    this.text(this.clockAt(tSim), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: '#fff' });
     this.addedBoard(x, y, tSim);
     // Corner watermark
     if (this.A.league) { c.globalAlpha = 0.75; c.drawImage(this.A.league, W - 110, H - 110, 60, 60); c.globalAlpha = 1; }
@@ -992,7 +997,7 @@ export class HighlightsRenderer {
       c.translate(x, 0); c.transform(1, 0, -0.35, 1, 0, 0);
       c.fillStyle = DARK; c.fillRect(0, 0, W * 0.9, H);
       c.fillStyle = this.limeGrad(0, 0, 140, 0); c.fillRect(-60, 0, 60, H);
-      c.fillStyle = 'rgba(143,255,6,0.35)'; c.fillRect(-110, 0, 22, H);
+      c.fillStyle = 'rgba(66,165,245,0.35)'; c.fillRect(-110, 0, 22, H);
       c.fillStyle = this.limeGrad(W * 0.9, 0, W * 0.9 + 40, 0); c.fillRect(W * 0.9, 0, 40, H);
       c.restore();
       if (this.A.league && Math.abs(d) < len * 0.6) {
@@ -1023,7 +1028,7 @@ export async function makeThumbnail(r) {
     c.save(); c.beginPath();
     if (side === 0) { c.moveTo(0, 0); c.lineTo(W * 0.56, 0); c.lineTo(W * 0.44, H); c.lineTo(0, H); } else { c.moveTo(W, 0); c.lineTo(W * 0.56 + 8, 0); c.lineTo(W * 0.44 + 8, H); c.lineTo(W, H); }
     c.closePath(); c.clip();
-    const g = c.createLinearGradient(side ? W : 0, 0, W / 2, H); g.addColorStop(0, col); g.addColorStop(1, 'rgba(11,13,17,0.2)');
+    const g = c.createLinearGradient(side ? W : 0, 0, W / 2, H); g.addColorStop(0, col); g.addColorStop(1, 'rgba(6,26,56,0.2)');
     c.globalAlpha = 0.8; c.fillStyle = g; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
     r.stripes(0, 0.8);
     c.restore();
@@ -1035,7 +1040,7 @@ export async function makeThumbnail(r) {
   r.pill(W / 2 - 280, H * 0.5 - 150, 560, 250, 'rgba(255,255,255,0.97)', 36);
   r.text(`${r.d.result.home}-${r.d.result.away}`, W / 2, H * 0.5 + 60, { size: 220, weight: 900, align: 'center', colour: DARK });
   r.pill(W / 2 - 420, 60, 840, 110, r.limeGrad(W / 2 - 420, 0, W / 2 + 420, 0), 24);
-  r.text(`WEEK ${r.fx?.week ?? ''} HIGHLIGHTS`, W / 2, 140, { size: 66, weight: 900, align: 'center', colour: DARK, italic: true });
+  r.text(`WEEK ${r.fx?.week ?? ''} HIGHLIGHTS`, W / 2, 140, { size: 66, weight: 900, align: 'center', colour: '#fff', italic: true });
   r.text(`${r.home.code}  v  ${r.away.code}`, W / 2, H - 90, { size: 86, weight: 900, align: 'center', shadow: 24, italic: true });
   if (r.A.league) c.drawImage(r.A.league, 60, H - 210, 150, 150);
   c.restore();
@@ -1046,12 +1051,12 @@ export async function makeThumbnail(r) {
 export function youtubeText(r) {
   const d = r.d, h = r.home, a = r.away, wk = r.fx?.week ?? d.match.week ?? '';
   const k = kickoff(r.fx || {});
-  const title = `${h.name} ${d.result.home}-${d.result.away} ${a.name} | Week ${wk} Highlights | Heineken C League S3`;
+  const title = `${h.name} ${d.result.home}-${d.result.away} ${a.name} | Week ${wk} Highlights | vLeague S1`;
   const goals = r.goals.map(g => `${g.minute}' ${r.names[g.scorer]}${g.own_goal ? ' (OG)' : ''} (${g.team})${g.assist ? `, assist ${r.names[g.assist]}` : ''}`);
   const st = d.stats.teams;
   const ps = d.stats.players, motm = Object.keys(ps).reduce((b, x) => (!b || ps[x].rating > ps[b].rating ? x : b), null);
   const desc = [
-    `${h.name} ${d.result.home}-${d.result.away} ${a.name}. Heineken C League Season ${r.season?.season ?? 3}, Week ${wk}${k ? `, ${k.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}.`,
+    `${h.name} ${d.result.home}-${d.result.away} ${a.name}. vLeague Season ${r.season?.season ?? 1}, Week ${wk}${k ? `, ${k.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}.`,
     '',
     'GOALS',
     ...(goals.length ? goals : ['No goals']),
@@ -1065,7 +1070,7 @@ export function youtubeText(r) {
     '',
     'Full match replay, ladder and stats: https://ldg224.github.io/s3/',
     '',
-    `#HCL #HeinekenCLeague #${h.code} #${a.code}`,
+    `#vLeague #VirtualFootball #${h.code} #${a.code}`,
   ].join('\n');
   return { title, description: desc, text: `TITLE\n${title}\n\nDESCRIPTION\n${desc}\n` };
 }
@@ -1083,7 +1088,7 @@ export async function loadAssets(teams) {
     logosAlt[t.code] = await loadImg(logoPath(t.code, true));
   }));
   const [league, title] = await Promise.all([loadImg('assets/league/logo.png'), loadImg('assets/league/title.jpg')]);
-  await Promise.all(['700', '800', '900'].map(w => document.fonts.load(`${w} 40px Inter`).catch(() => {})));
+  await Promise.all(['500 40px Oswald', '700 40px Oswald', '700 40px Figtree'].map(f => document.fonts.load(f).catch(() => {})));
   return { logos, logosAlt, league, title };
 }
 
