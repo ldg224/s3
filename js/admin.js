@@ -8,8 +8,9 @@
 import { REPO, BRANCH, SEASON_FILE, MATCH_DIR } from './config.js';
 import { loadSeason, setSeason, summariseMatch, parseMatchBlob, localFiles, kickoff, loadMatchFile, status } from './data.js';
 import { esc, safeColour, logo, fmtDate, fmtTime } from './ui.js';
-import { STAGE_NAMES } from './league.js';
+import { STAGE_NAMES, postpone, reschedule } from './league.js';
 import { loginHash, newSalt } from './managers.js';
+import { toast, ask, askText, info } from './admin-ui.js';
 
 const STORE = 'hcl-s3-admin';
 const SESSION = 'hcl-s3-admin-token';
@@ -18,8 +19,79 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 let token = null;
 let base = null;          // season as last loaded/published
 let draft = null;         // working copy
-let uploads = new Map();  // repo path -> Blob to commit
-let tab = 'fixtures';
+const uploads = new Map();  // repo path -> Blob to commit
+const TABS = [['home', 'Needs attention'], ['fixtures', 'Fixtures'], ['news', 'News'], ['teams', 'Teams'], ['league', 'League'], ['history', 'History'], ['settings', 'Settings']];
+const SUBS = { fixtures: [['list', 'Matches'], ['generate', 'Generate a season'], ['upload', 'Upload a match file']], teams: [['clubs', 'Clubs'], ['players', 'Players']] };
+let tab = 'home';
+const sub = { fixtures: 'list', teams: 'clubs' };
+
+// The open tab lives in the address (#fixtures/upload), so a reload or a shared link reopens it.
+function readHash() {
+  const [t, s] = location.hash.slice(1).split('/');
+  if (TABS.some(([k]) => k === t)) tab = t;
+  if (s && SUBS[tab]?.some(([k]) => k === s)) sub[tab] = s;
+}
+function writeHash() {
+  const h = `#${tab}${SUBS[tab] ? `/${sub[tab]}` : ''}`;
+  if (location.hash !== h) history.replaceState(null, '', h);
+}
+function go(t, s) { tab = t; if (s) sub[t] = s; refresh(); }
+
+// ---------- Holds and undo ----------
+// Auto-publish waits while anything holds it: a batch simulation, an Undo toast, a tab (ctx.hold).
+
+const holds = new Set();
+function hold(key) { holds.add(key); clearTimeout(autoTimer); if (panel) showState(); }
+function release(key) { if (holds.delete(key)) scheduleAutoPublish(); if (panel) showState(); }
+
+// Run a change with an Undo toast. Nothing publishes until the toast has gone, so Undo is
+// only ever a local change and never needs a second commit (or deleted files brought back).
+let undoN = 0;
+function change(label, mutate) {
+  const before = structuredClone(draft), beforeUploads = new Map(uploads);
+  mutate();
+  const key = `undo${++undoN}`;
+  hold(key);
+  refresh();
+  toast(label, {
+    kind: 'ok',
+    undo: () => { draft = before; uploads.clear(); for (const [k, v] of beforeUploads) uploads.set(k, v); refresh(); },
+    onClose: () => release(key),
+  });
+}
+
+// ---------- Draft kept on this device ----------
+// Unpublished changes (and files waiting to upload) are saved in IndexedDB, so a failed publish,
+// a crash or a closed tab doesn't lose them. Cleared once everything is live.
+
+const DRAFT_KEY = 'draft';
+async function saveDraft() {
+  try {
+    if (!draft || !base) return;
+    if (!pendingCount()) return await fsStore('readwrite', s => s.delete(DRAFT_KEY));
+    await fsStore('readwrite', s => s.put({ draft, uploads: [...uploads], base_updated: base.updated || '', saved: new Date().toISOString() }, DRAFT_KEY));
+  } catch { /* storage unavailable: work still publishes normally */ }
+}
+// Never let storage hold up opening the editor (IndexedDB can hang when a browser blocks it).
+const loadDraft = () => Promise.race([fsStore('readonly', s => s.get(DRAFT_KEY)).catch(() => null), new Promise(r => setTimeout(r, 2000, null))]);
+const dropDraft = () => fsStore('readwrite', s => s.delete(DRAFT_KEY)).catch(() => {});
+
+async function offerSavedDraft() {
+  const saved = await loadDraft();
+  if (!saved?.draft || JSON.stringify(strip(saved.draft)) === JSON.stringify(strip(base))) { if (saved) dropDraft(); return; }
+  const when = new Date(saved.saved).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  const changedSince = (base.updated || '') > (saved.base_updated || '');
+  const yes = await ask({
+    title: 'Unpublished changes found',
+    text: `This device has changes from ${when} that weren't published.${changedSince ? ' The league has been changed elsewhere since then, so restoring them replaces those newer changes.' : ''} Restore them?`,
+    ok: 'Restore my changes', cancel: 'Throw them away', danger: changedSince,
+  });
+  if (!yes) { dropDraft(); return; }
+  draft = saved.draft;
+  draft.updated = base.updated;
+  for (const [k, v] of saved.uploads || []) { uploads.set(k, v); if (k.startsWith(MATCH_DIR)) localFiles.set(k, v); }
+  toast('Your unpublished changes are back.', { kind: 'ok' });
+}
 
 // ---------- Crypto ----------
 
@@ -93,8 +165,9 @@ const strip = s => ({ ...s, updated: null });
 
 
 function modal(html) {
-  const m = el(`<div class="ed-modal" role="dialog" aria-modal="true"><div class="ed-box">${html}</div></div>`);
-  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+  const m = el(`<div class="ed-modal"><div class="ed-box" role="dialog" aria-modal="true">${html}</div></div>`);
+  m.addEventListener('click', e => { if (e.target === m) m.querySelector('[data-close]')?.click(); });
+  m.addEventListener('keydown', e => { if (e.key === 'Escape') m.querySelector('[data-close]')?.click(); });
   document.body.appendChild(m);
   return m;
 }
@@ -118,7 +191,10 @@ function openUnlock() {
   m.querySelector('.primary').onclick = go;
   input.onkeydown = e => { if (e.key === 'Enter') go(); };
   m.querySelector('[data-close]').onclick = () => m.remove();
-  m.querySelector('[data-reset]').onclick = () => { if (confirm('Forget the saved access token on this device and set up again?')) { localStorage.removeItem(STORE); m.remove(); openSetup(); } };
+  m.querySelector('[data-reset]').onclick = async () => {
+    if (!await ask({ title: 'Set up again?', text: 'This forgets the saved access token on this device. You’ll need a GitHub token to set it up again.', ok: 'Forget and set up', danger: true })) return;
+    localStorage.removeItem(STORE); m.remove(); openSetup();
+  };
 }
 
 function openSetup() {
@@ -159,6 +235,7 @@ async function startEditing() {
   if (!base) {
     base = structuredClone(await loadSeason(true)); // fresh copy, not the one the page loaded earlier
     draft = structuredClone(base);
+    await offerSavedDraft();
   }
   openPanel();
 }
@@ -166,24 +243,30 @@ async function startEditing() {
 function openPanel() {
   if (!panel) {
     panel = el(`<section class="ed-panel" aria-label="League editor">
-      <div class="ed-head"><h2>League admin</h2><span class="ed-pending"></span>
+      <div class="ed-head"><h2>League admin</h2><span class="ed-pending" role="status" aria-live="polite"></span>
         <button class="ed-btn primary" data-publish>Publish now</button><button class="ed-btn" data-discard>Discard</button>
         <a class="ed-btn" href="index.html" target="_blank" rel="noopener">View site ↗</a>
         <button class="ed-btn" data-lock title="Lock edit mode">Lock</button></div>
       <nav class="ed-tabs" role="tablist" aria-label="Admin sections"></nav>
-      <div class="ed-body"></div></section>`);
+      <div class="ed-body" role="tabpanel"></div></section>`);
     root().replaceChildren(panel);
     panel.querySelector('[data-lock]').onclick = lock;
-    panel.querySelector('[data-discard]').onclick = () => { if (confirm('Discard all unpublished changes?')) { draft = structuredClone(base); uploads.clear(); refresh(); } };
+    panel.querySelector('[data-discard]').onclick = async () => {
+      if (!await ask({ title: 'Discard unpublished changes?', text: 'Everything not yet live goes back to how it is on the site.', ok: 'Discard', danger: true })) return;
+      draft = structuredClone(base); uploads.clear(); holds.clear(); refresh();
+    };
     panel.querySelector('[data-publish]').onclick = () => { autoBlocked = false; publish(); };
   }
   refresh();
 }
 
-function lock() {
-  if (pendingCount() && !confirm('Some changes haven’t been published yet. Lock anyway? They will be lost.')) return;
+async function lock() {
+  if (publishing) { toast('Wait for the current save to finish, then lock.', { kind: 'err' }); return; }
+  if (pendingCount() && !await ask({ title: 'Lock with unpublished changes?', text: 'They stay saved on this device and you’ll be offered them next time you unlock.', ok: 'Lock' })) return;
+  await saveDraft();
   token = null;
   try { sessionStorage.removeItem(SESSION); } catch { /* storage unavailable */ }
+  clearTimeout(autoTimer); holds.clear();
   panel = null;
   draft = base = null; uploads.clear();
   showLocked();
@@ -205,19 +288,42 @@ function showLocked() {
 }
 
 function refresh() {
+  if (!panel) return;   // locked while something was still running
   const n = pendingCount();
   showState();
   panel.querySelector('[data-publish]').disabled = !n || publishing;
-  const tabs = [['fixtures', 'Fixtures'], ['news', 'News'], ['generate', 'Generate'], ['upload', 'Upload match'], ['teams', 'Teams'], ['players', 'Players'], ['league', 'League'], ['history', 'History'], ['settings', 'Settings']];
+  writeHash();
   const tb = panel.querySelector('.ed-tabs');
-  tb.innerHTML = tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
-  tb.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; refresh(); } };
+  const home = homeCount();
+  tb.innerHTML = TABS.map(([k, l]) => `<button role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${tab === k}" tabindex="${tab === k ? 0 : -1}">${l}${k === 'home' && home ? ` <span class="ed-badge">${home}</span>` : ''}</button>`).join('');
+  tb.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); };
+  // Arrow keys move between tabs (the usual tablist keyboard pattern).
+  tb.onkeydown = e => {
+    const i = TABS.findIndex(([k]) => k === tab), j = { ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+    if (j === undefined) return;
+    e.preventDefault();
+    go(TABS[(j + TABS.length) % TABS.length][0]);
+    panel.querySelector(`#tab-${tab}`).focus();
+  };
   const body = panel.querySelector('.ed-body');
+  body.setAttribute('aria-labelledby', `tab-${tab}`);
   body.innerHTML = '';
   body.onchange = null;
   body.onclick = null;
   body.oninput = null;
-  ({ fixtures: fixturesTab, news: newsTabHost, generate: generateTab, upload: uploadTab, teams: teamsTab, players: playersTab, league: leagueTabHost, history: historyTab, settings: settingsTab })[tab](body);
+  let target = body;
+  if (SUBS[tab]) {
+    // Tabs with sub-views (Fixtures: matches / generate / upload; Teams: clubs / players).
+    body.innerHTML = `<div class="ed-subnav" role="group" aria-label="View">${SUBS[tab].map(([k, l]) => `<button class="fx-filter" data-sub="${k}" aria-pressed="${sub[tab] === k}">${l}</button>`).join('')}</div><div class="ed-subbody"></div>`;
+    body.querySelector('.ed-subnav').onclick = e => { const b = e.target.closest('[data-sub]'); if (b) go(tab, b.dataset.sub); };
+    target = body.querySelector('.ed-subbody');
+  }
+  const views = {
+    home: homeTab, news: newsTabHost, league: leagueTabHost, history: historyTab, settings: settingsTab,
+    fixtures: { list: fixturesTab, generate: generateTab, upload: uploadTab }[sub.fixtures],
+    teams: { clubs: teamsTab, players: playersTab }[sub.teams],
+  };
+  views[tab](target);
   syncDraft();
 }
 
@@ -228,6 +334,7 @@ function syncDraft() {
     syncDraft.sig = sig;
     setSeason(draft);
     window.dispatchEvent(new CustomEvent('season-changed', { detail: draft }));
+    saveDraft();
     scheduleAutoPublish();
   }
 }
@@ -268,13 +375,20 @@ function fixtureCard(f, T) {
   const mid = f.result ? `<span class="fx-score ${state.key === 'ready' ? 'hidden' : ''}" title="${state.key === 'ready' ? 'Hidden from the public until kick-off' : ''}">${f.result.home}–${f.result.away}</span>`
     : `<span class="fx-time">${k ? esc(fmtTime(k)) : 'TBC'}</span>`;
   const btn = (act, label, cls = '') => `<button class="ed-btn small ${cls}" data-act="${act}">${label}</button>`;
+  const item = (act, label, cls = '') => `<button class="ed-menu-item ${cls}" data-act="${act}">${label}</button>`;
+  // The everyday actions stay visible; the rest (and anything destructive) go in the ⋯ menu.
+  const menu = [
+    item('upload', f.result ? 'Replace match file' : 'Upload match file'),
+    f.result ? item('video', '🎬 Highlights video') : '',
+    !f.postponed && !f.result && f.home && f.away ? item('postpone', 'Postpone') : '',
+    f.postponed || f.original ? item('restore-date', f.original?.date ? `Restore original date (${esc(fmtDate(kickoff({ ...f, ...f.original })))})` : 'Cancel postponement') : '',
+    f.result ? item('clear', 'Remove result', 'danger') : '',
+    item('delete', 'Delete fixture', 'danger'),
+  ].join('');
   const actions = [
     !f.result && !f.postponed && f.home && f.away ? btn('sim', '⚡ Simulate', 'primary') : '',
-    f.result ? btn('video', '🎬 Video') : '',
-    btn('upload', f.result ? 'Replace file' : 'Upload file'),
-    f.result ? btn('clear', 'Remove result', 'danger') : '',
-    btn('edit', editing ? 'Done' : 'Edit'),
-    btn('delete', 'Delete', 'danger'),
+    btn('edit', editing ? 'Done' : f.postponed ? 'Reschedule' : 'Edit'),
+    `<details class="ed-menu"><summary class="ed-btn small" aria-label="More actions">⋯</summary><div class="ed-menu-list">${menu}</div></details>`,
   ].join('');
   return `<article class="fx-card ${state.key}" data-id="${esc(f.id)}">
     <div class="fx-meta"><span>${f.stage ? `<b>${esc(STAGE_NAMES[f.stage] || f.stage)}</b> · ` : ''}${k ? esc(fmtDate(k)) : 'No date set'}</span>
@@ -322,7 +436,8 @@ function fixturesTab(body) {
     <div class="fx-top"><div><h3>Fixtures</h3><p class="ed-hint">${all.length} matches · ${count('ready') + count('done')} with results · results stay hidden until kick-off, then play out live over ${esc(draft.live_minutes || 10)} minutes.</p></div>
       ${todo ? `<button class="ed-btn primary" id="sim-all">⚡ Simulate all ${todo} without a result</button>` : ''}</div>
     <div class="fx-filters">${filters.map(([k, l, n]) => `<button class="fx-filter" data-filter="${k}" aria-pressed="${fxFilter === k}">${l} <span>${n}</span></button>`).join('')}</div>
-    ${weekHtml || `<p class="ed-hint">${all.length ? 'Nothing matches this filter.' : 'No fixtures yet. Use <b>Generate</b> to build a season, or add one below.'}</p>`}
+    ${weekHtml || (all.length ? '<p class="ed-hint">Nothing matches this filter.</p>'
+    : `<div class="ed-empty"><b>No fixtures yet.</b><span class="ed-hint">Build a whole season in one go, or add fixtures one at a time below.</span><button class="ed-btn primary" data-go-sub="generate">Generate a season</button></div>`)}
     <details class="fx-add"><summary>+ Add a fixture</summary>
       <div class="fx-edit">
         <label class="ed-field">Week<input class="ed-input" type="number" min="1" id="nf-week" value="${esc(all.length ? all[all.length - 1].week ?? 1 : 1)}"></label>
@@ -333,48 +448,65 @@ function fixturesTab(body) {
         <button class="ed-btn primary" id="nf-add">Add fixture</button></div></details></div>`;
 
   body.querySelectorAll('details.fx-week').forEach(d => d.addEventListener('toggle', () => { d.open ? fxOpenWeeks.add(d.dataset.week) : fxOpenWeeks.delete(d.dataset.week); }));
-  body.onchange = e => {
+  body.onchange = async e => {
     const card = e.target.closest('.fx-card'), k = e.target.dataset.k;
     if (!card || !k) return;
     const f = draft.fixtures.find(x => x.id === card.dataset.id);
     let v = e.target.value;
     if (k === 'week') v = v === '' ? null : +v;
-    if ((k === 'home' || k === 'away') && f.result && !confirm('This fixture already has a result for different teams. Change the team anyway?')) { refresh(); return; }
-    f[k] = v || (k === 'week' ? null : '');
+    if (k === 'home' || k === 'away') {
+      if (v === f[k === 'home' ? 'away' : 'home']) { toast('A team can’t play itself. Pick a different team.', { kind: 'err' }); refresh(); return; }
+      if (f.result && !await ask({ title: 'Change a team with a result?', text: 'This fixture already has a result for different teams. The result stays attached.', ok: 'Change team', danger: true })) { refresh(); return; }
+    }
+    if ((k === 'date' || k === 'time') && f.postponed && v) {
+      // Giving a postponed match a date reschedules it.
+      reschedule(f, k === 'date' ? v : f.date, k === 'time' ? v : f.time);
+      if (!f.date) f.postponed = true;   // only the time was set; still waiting for a date
+      else toast(`${nameOf(T, f.home)} v ${nameOf(T, f.away)} rescheduled.`, { kind: 'ok' });
+    } else f[k] = v || (k === 'week' ? null : '');
     if (k === 'week') fxOpenWeeks.add(String(v ?? 'TBA'));
     refresh();
   };
-  body.onclick = e => {
+  body.onclick = async e => {
+    const gs = e.target.closest('[data-go-sub]');
+    if (gs) { go('fixtures', gs.dataset.goSub); return; }
     const fl = e.target.closest('[data-filter]');
     if (fl) { fxFilter = fl.dataset.filter; refresh(); return; }
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const f = draft.fixtures.find(x => x.id === b.closest('.fx-card').dataset.id);
-    const name = c => T[c]?.name || c || 'TBC';
+    const vs = `${nameOf(T, f.home)} v ${nameOf(T, f.away)}`;
     const act = b.dataset.act;
     if (act === 'edit') { fxEditing.has(f.id) ? fxEditing.delete(f.id) : fxEditing.add(f.id); refresh(); }
-    if (act === 'delete' && confirm(`Delete ${name(f.home)} v ${name(f.away)} (week ${f.week ?? '?'})?`)) {
-      if (f.file) uploads.delete(f.file);
-      draft.fixtures = draft.fixtures.filter(x => x !== f);
-      refresh();
-    }
-    if (act === 'clear' && confirm(`Remove the result of ${name(f.home)} v ${name(f.away)}? You can simulate or upload it again.`)) { uploads.delete(f.file); f.result = null; delete f.file; refresh(); }
-    if (act === 'upload') { tab = 'upload'; uploadTarget = f.id; refresh(); }
+    if (act === 'delete') change(`${vs} (week ${f.week ?? '?'}) deleted.`, () => { if (f.file) uploads.delete(f.file); draft.fixtures = draft.fixtures.filter(x => x !== f); });
+    if (act === 'clear') change(`Result of ${vs} removed.`, () => { uploads.delete(f.file); f.result = null; delete f.file; });
+    if (act === 'upload') { uploadTarget = f.id; go('fixtures', 'upload'); }
     if (act === 'video') openVideoExport(f);
     if (act === 'sim') simulateMany([f]);
+    if (act === 'postpone') {
+      const reason = await askText({ title: `Postpone ${vs}?`, text: 'It stays in the fixture list, marked postponed, until you give it a new date (Reschedule).', label: 'Reason (optional, shown on the site)', ok: 'Postpone' });
+      if (reason !== null) change(`${vs} postponed.`, () => postpone(f, reason));
+    }
+    if (act === 'restore-date') change(f.original?.date ? `${vs} back on its original date.` : `${vs} is no longer postponed.`, () => {
+      if (f.original?.date) reschedule(f, f.original.date, f.original.time);
+      else { delete f.postponed; delete f.postponed_reason; }
+      delete f.original;
+    });
   };
-  body.querySelector('#sim-all')?.addEventListener('click', () => {
+  body.querySelector('#sim-all')?.addEventListener('click', async () => {
     const list = unplayed();
-    if (confirm(`Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}? This can take a while; keep this tab open.`)) simulateMany(list);
+    if (await ask({ title: `Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}?`, text: 'This can take a while. Keep this tab open; each result is kept on this device as it finishes, and everything publishes together at the end.', ok: 'Simulate' })) simulateMany(list);
   });
   body.querySelector('#nf-add').onclick = () => {
     const week = +body.querySelector('#nf-week').value || 1, h = body.querySelector('#nf-home').value, a = body.querySelector('#nf-away').value;
-    if (h === a) return alert('Pick two different teams.');
+    if (h === a) return toast('Pick two different teams.', { kind: 'err' });
     draft.fixtures.push({ id: newId(week, h, a), week, date: body.querySelector('#nf-date').value, time: body.querySelector('#nf-time').value, home: h, away: a, result: null });
     fxOpenWeeks.add(String(week));
+    toast(`${nameOf(T, h)} v ${nameOf(T, a)} added to week ${week}.`, { kind: 'ok' });
     refresh();
   };
 }
+const nameOf = (T, c) => T[c]?.name || c || 'TBC';
 
 // ---------- Highlights video ----------
 // Renders a ~3 minute highlights MP4, thumbnail and YouTube text for a fixture, in the browser,
@@ -548,14 +680,16 @@ function renderUpload(body) {
   body.querySelector('#u-cancel').onclick = () => { pendingFile = null; uploadTarget = null; refresh(); };
   body.querySelector('#u-save').onclick = async () => {
     const week = +body.querySelector('#u-week').value || 1, date = body.querySelector('#u-date').value, time = body.querySelector('#u-time').value;
-    if (!date) return alert('Set the kick-off date. The result is hidden until then.');
+    if (!date) { body.querySelector('#u-date').focus(); return toast('Set the kick-off date. The result is hidden until then.', { kind: 'err' }); }
     let f = sel.value === '__new' ? null : draft.fixtures.find(x => x.id === sel.value);
-    if (f && (f.home !== h.code || f.away !== a.code) && !confirm('The teams in this file don\'t match that fixture. Attach anyway (the fixture will be updated to these teams)?')) return;
+    if (f && (f.home !== h.code || f.away !== a.code) && !await ask({ title: 'Teams don’t match', text: 'The teams in this file don’t match that fixture. Attach it anyway? The fixture will be changed to these teams.', ok: 'Attach anyway', danger: true })) return;
     if (!f) { f = { id: newId(week, h.code, a.code), result: null }; draft.fixtures.push(f); }
     Object.assign(f, { week, date, time, home: h.code, away: a.code });
     await attachMatch(f, d);
-    pendingFile = null; uploadTarget = null; tab = 'fixtures';
-    refresh();
+    pendingFile = null; uploadTarget = null;
+    fxOpenWeeks.add(String(week));
+    toast(`${h.name} ${d.result.home}–${d.result.away} ${a.name} added to week ${week}.`, { kind: 'ok' });
+    go('fixtures', 'list');
   };
 }
 
@@ -574,7 +708,6 @@ async function attachMatch(f, d) {
 // Runs the HCL match simulator in this browser (js/simulate.js) and attaches the result.
 
 const unplayed = () => draft.fixtures.filter(f => !f.result && !f.postponed && f.home && f.away).sort((a, b) => (a.week ?? 999) - (b.week ?? 999) || (kickoff(a) ?? 0) - (kickoff(b) ?? 0));
-let holdAuto = false;   // pause auto-publish during a batch, then publish once
 
 async function simulateMany(list) {
   const m = modal(`<h2>⚡ Simulate</h2><p class="sim-what"></p>
@@ -585,7 +718,7 @@ async function simulateMany(list) {
   const skipped = [];
   m.addEventListener('click', e => { if (running && e.target === m) e.stopImmediatePropagation(); }, true);
   close.onclick = () => { if (running) { cancelled = true; close.textContent = 'Stopping after this match…'; } else m.remove(); };
-  holdAuto = true;
+  hold('sim');   // one publish at the end of the batch (each result is still saved on this device)
   try {
     const sim = await import('./simulate.js').catch(() => { throw new Error('The simulator isn’t installed on the site yet.'); });
     for (const f of list) {
@@ -613,9 +746,9 @@ async function simulateMany(list) {
   } catch (e) {
     err.textContent = `${done ? `${done} simulated, then: ` : ''}${e.message}`;
   } finally {
-    running = false; holdAuto = false; close.textContent = 'Close';
+    running = false; close.textContent = 'Close';
+    release('sim');
     refresh();
-    scheduleAutoPublish();
   }
 }
 
@@ -664,7 +797,7 @@ function planSeason() {
 }
 
 function generateTab(body) {
-  if (!gen.teams) gen.teams = new Set(draft.teams.map(t => t.code));
+  if (!gen.teams) gen.teams = new Set(draft.teams.filter(t => !t.withdrawn).map(t => t.code));
   if (!gen.start) { const d = new Date(Date.now() + 7 * 86400000); gen.start = d.toISOString().slice(0, 10); }
   body.innerHTML = `<div class="ed-section"><h3>Generate a season</h3>
     <p class="ed-hint">Every team plays every other team. With an odd number of teams, one team rests each round.</p>
@@ -701,11 +834,12 @@ function generateTab(body) {
   body.querySelector('#gen-add').onclick = () => {
     const plan = planSeason();
     if (plan.error) return;
-    if (plan.removed && !confirm(`This removes ${plan.removed} fixture${plan.removed > 1 ? 's' : ''} without results. Continue?`)) return;
-    if (gen.mode === 'replace') draft.fixtures = draft.fixtures.filter(f => f.result);
-    for (const f of plan.fixtures) draft.fixtures.push({ id: newId(f.week, f.home, f.away), ...f, result: null });
-    tab = 'fixtures';
-    refresh();
+    tab = 'fixtures'; sub.fixtures = 'list';
+    fxOpenWeeks.add(String(plan.fixtures[0].week));
+    change(`${plan.fixtures.length} fixtures added${plan.removed ? `, ${plan.removed} without results replaced` : ''}.`, () => {
+      if (gen.mode === 'replace') draft.fixtures = draft.fixtures.filter(f => f.result);
+      for (const f of plan.fixtures) draft.fixtures.push({ id: newId(f.week, f.home, f.away), ...f, result: null });
+    });
   };
   preview();
 }
@@ -722,25 +856,92 @@ async function readRepo(path) {
   return res.blob();
 }
 
+// What the News and League tabs get from here (shared UI in js/admin-ui.js).
+//   change(label, mutate)  run an edit with an Undo toast; publishing waits for the toast
+//   hold(key) / release(key)  pause / resume auto-publish
+//   go(tab, sub)  switch tab
+const ctx = {
+  get draft() { return draft; }, refresh, touch, esc, uploads, readRepo, teamOpts,
+  change, hold, release, go, toast, ask, askText, info,
+};
+
 let newsMod;
+const loadNews = () => import('./admin-news.js').then(m => (newsMod = m));
 function newsTabHost(body) {
-  const ctx = { get draft() { return draft; }, refresh, touch, esc, uploads, readRepo };
   if (newsMod) return newsMod.newsTab(body, ctx);
   body.innerHTML = '<div class="ed-section"><p class="ed-hint">Loading…</p></div>';
-  import('./admin-news.js')
-    .then(m => { newsMod = m; if (tab === 'news') refresh(); })
+  loadNews()
+    .then(() => { if (tab === 'news') refresh(); })
     .catch(e => { body.innerHTML = `<div class="ed-section"><h3>News</h3><p class="ed-err">Couldn't load the news editor: ${esc(e.message)}</p></div>`; });
+}
+
+// ---------- Needs attention (home) ----------
+// One list of everything waiting on the admin, from every tab. Each item links to where it's fixed.
+
+function coreAttention() {
+  const items = [], T = Object.fromEntries(draft.teams.map(t => [t.code, t]));
+  const byState = key => draft.fixtures.filter(f => fxState(f).key === key);
+  const vsList = list => list.slice(0, 3).map(f => `${nameOf(T, f.home)} v ${nameOf(T, f.away)}`).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '');
+  if (liveState === 'failed') items.push({ level: 'red', text: 'The last publish didn’t go through. Your changes are still here; press Publish now to try again.' });
+  const late = byState('warn');
+  if (late.length) items.push({ level: 'red', text: `${late.length} match${late.length > 1 ? 'es have' : ' has'} kicked off without a result: ${vsList(late)}.`, tab: 'fixtures', filter: 'todo', act: '⚡ Simulate them' });
+  const soon = draft.fixtures.filter(f => fxState(f).key === 'up' && kickoff(f) - Date.now() < 2 * 86400000);
+  if (soon.length) items.push({ level: 'amber', text: `${soon.length} match${soon.length > 1 ? 'es kick' : ' kicks'} off in the next 2 days with no result yet: ${vsList(soon)}.`, tab: 'fixtures', filter: 'todo' });
+  const undated = draft.fixtures.filter(f => f.home && f.away && (!kickoff(f) || f.postponed));
+  if (undated.length) items.push({ level: 'amber', text: `${undated.length} fixture${undated.length > 1 ? 's need' : ' needs'} a date${undated.some(f => f.postponed) ? ' (including postponed ones)' : ''}.`, tab: 'fixtures', filter: 'tbc' });
+  const players = draft.players || [];
+  const active = draft.teams.filter(t => !t.withdrawn);
+  const unready = active.filter(t => { const ps = players.filter(p => p.team === t.code); return ps.length < 11 || !ps.some(p => p.position === 'GK'); });
+  if (unready.length) items.push({ level: 'amber', text: `${unready.map(t => t.name).join(', ')} can’t be simulated yet: each team needs 11 players including a goalkeeper.`, tab: 'teams', sub: 'players' });
+  const noLogin = active.filter(t => !(draft.managers || {})[t.code]);
+  if (noLogin.length) items.push({ level: 'amber', text: `${noLogin.length} team${noLogin.length > 1 ? 's have' : ' has'} no manager login: ${noLogin.map(t => t.name).join(', ')}.`, tab: 'teams', sub: 'clubs' });
+  if (draft.managers && Object.keys(draft.managers).length && !draft.manager_relay) items.push({ level: 'amber', text: 'Managers have logins but the Manager Hub link isn’t set, so they can’t save.', tab: 'settings' });
+  if (!draft.fixtures.length) items.push({ level: 'amber', text: 'There are no fixtures yet.', tab: 'fixtures', sub: 'generate', act: 'Generate a season' });
+  return items;
+}
+
+// Items from the News and League tabs, once those modules have loaded. Only the home tab passes
+// ctx (which lets News fetch the team files); the tab badge uses whatever is already cached.
+function moduleAttention(load = false) {
+  const out = [];
+  for (const [mod, t] of [[newsMod, 'news'], [leagueMod, 'league']]) {
+    try { for (const it of mod?.attention?.(draft, load ? ctx : undefined) || []) out.push({ tab: t, ...it }); } catch { /* a module's check failing shouldn't hide the rest */ }
+  }
+  return out;
+}
+const homeCount = () => (draft ? coreAttention().length + moduleAttention().length : 0);
+
+function homeTab(body) {
+  // Load News and League in the background so their items appear too.
+  if (!newsMod || !leagueMod) Promise.allSettled([newsMod || loadNews(), leagueMod || loadLeague()]).then(() => { if (tab === 'home') refresh(); });
+  const items = [...coreAttention(), ...moduleAttention(true)].sort((a, b) => (a.level === 'red' ? 0 : 1) - (b.level === 'red' ? 0 : 1));
+  const T = Object.fromEntries(draft.teams.map(t => [t.code, t]));
+  const next = draft.fixtures.filter(f => kickoff(f) && kickoff(f) > Date.now() && !f.postponed).sort((a, b) => kickoff(a) - kickoff(b)).slice(0, 5);
+  const label = it => it.act || (it.view === 'responses' ? 'Review responses' : null) || { fixtures: 'Open fixtures', news: 'Open post', league: 'Open League', teams: 'Open teams', settings: 'Open settings' }[it.tab] || 'Open';
+  body.innerHTML = `<div class="ed-section"><h3>Needs attention</h3>
+    ${items.length ? `<div class="att-list">${items.map((it, i) => `<div class="att-item ${it.level}"><span class="att-dot" aria-hidden="true"></span><span class="att-text">${esc(it.text)}</span>${it.tab ? `<button class="ed-btn small" data-att="${i}">${esc(label(it))}</button>` : ''}</div>`).join('')}</div>`
+    : '<p class="ed-ok">✓ Nothing needs doing right now.</p>'}</div>
+    <div class="ed-section"><h3>Coming up</h3>${next.length ? next.map(f => `<div class="hist-row"><span><b>${esc(nameOf(T, f.home))} v ${esc(nameOf(T, f.away))}</b><span class="ed-hint">Week ${esc(f.week ?? '?')} · ${esc(fmtDate(kickoff(f)))} ${esc(fmtTime(kickoff(f)))}</span></span><span class="fx-chip ${fxState(f).key}">${esc(fxState(f).label)}</span></div>`).join('') : '<p class="ed-hint">No upcoming matches.</p>'}</div>`;
+  body.onclick = e => {
+    const b = e.target.closest('[data-att]');
+    if (!b) return;
+    const it = items[+b.dataset.att];
+    if (it.filter) fxFilter = it.filter;
+    if (it.tab === 'news' && it.post) newsMod?.openPost?.(it.post, it.view);
+    if (it.act === '⚡ Simulate them') { go('fixtures', 'list'); simulateMany(draft.fixtures.filter(f => fxState(f).key === 'warn')); return; }
+    go(it.tab, it.sub);
+  };
 }
 
 // ---------- League (finals, suspensions, adjustments, rescheduling): js/admin-league.js ----------
 
 let leagueMod;
+const loadLeague = () => import('./admin-league.js').then(m => (leagueMod = m));
 function leagueTabHost(body) {
-  const ctx = { get draft() { return draft; }, refresh, esc, teamOpts };
   if (leagueMod) return leagueMod.leagueTab(body, ctx);
   body.innerHTML = '<div class="ed-section"><p class="ed-hint">Loading…</p></div>';
-  import('./admin-league.js')
-    .then(m => { leagueMod = m; if (tab === 'league') refresh(); })
+  loadLeague()
+    .then(() => { if (tab === 'league') refresh(); })
     .catch(() => { body.innerHTML = '<div class="ed-section"><h3>League</h3><p class="ed-hint">Finals, suspensions, points adjustments and rescheduling are coming soon.</p></div>'; });
 }
 
@@ -754,11 +955,13 @@ function playersTab(body) {
   const teams = draft.teams, known = new Set(teams.map(t => t.code)), free = p => !known.has(p.team);
   const shown = draft.players.filter(p => playerTeam === 'all' || (playerTeam === '__free' ? free(p) : p.team === playerTeam))
     .sort((a, b) => a.team.localeCompare(b.team) || POSITIONS.indexOf(a.position) - POSITIONS.indexOf(b.position) || a.name.localeCompare(b.name));
-  const squad = teams.map(t => {
+  // Squad chips double as the team filter.
+  const squads = () => teams.map(t => {
     const ps = draft.players.filter(p => p.team === t.code), gk = ps.filter(p => p.position === 'GK').length;
     const ok = ps.length >= 11 && gk >= 1;
-    return `<span class="squad-chip ${ok ? '' : 'bad'}" title="${ok ? 'Ready to simulate' : 'Needs at least 11 players including a goalkeeper to simulate'}">${esc(t.code)} ${ps.length}${gk ? '' : ' · no GK'}</span>`;
-  }).join('') + (draft.players.some(free) ? `<span class="squad-chip free">Free agents ${draft.players.filter(free).length}</span>` : '');
+    return `<button class="squad-chip ${ok ? '' : 'bad'}" data-show="${esc(t.code)}" aria-pressed="${playerTeam === t.code}" title="${ok ? 'Ready to simulate' : 'Needs at least 11 players including a goalkeeper to simulate'}">${esc(t.code)} ${ps.length}${gk ? '' : ' · no GK'}</button>`;
+  }).join('') + (draft.players.some(free) ? `<button class="squad-chip free" data-show="__free" aria-pressed="${playerTeam === '__free'}">Free agents ${draft.players.filter(free).length}</button>` : '');
+  const squad = squads();
   const teamSel = (sel, attrs) => `<select class="ed-select" ${attrs}><option value=""${known.has(sel) ? '' : ' selected'}>Free agent</option>${teams.map(t => `<option value="${esc(t.code)}"${t.code === sel ? ' selected' : ''}>${esc(t.code)}</option>`).join('')}</select>`;
   const posSel = (sel, attrs) => `<select class="ed-select" ${attrs}>${POSITIONS.map(x => `<option${x === sel ? ' selected' : ''}>${x}</option>`).join('')}</select>`;
   body.innerHTML = `<div class="ed-section"><h3>Squads</h3><div class="squads">${squad || '<span class="ed-hint">No teams yet.</span>'}</div>
@@ -782,25 +985,32 @@ function playersTab(body) {
     const pl = draft.players.find(x => x.id === tr.dataset.pid);
     let v = e.target.value;
     if (k === 'offense' || k === 'defense') v = Math.max(1, Math.min(10, Math.round(+v) || 1));
-    if (k === 'name' && !v.trim()) { refresh(); return; }
+    if (k === 'name' && !v.trim()) { e.target.value = pl.name; toast('A player needs a name.', { kind: 'err' }); return; }
     pl[k] = typeof v === 'string' ? v.trim() : v;
-    refresh();
+    if (typeof v === 'number') e.target.value = v;
+    // Update in place (no re-render), so Tab moves on to the next field as normal.
+    body.querySelector('.squads').innerHTML = squads();
+    touch();
   };
   body.onclick = e => {
+    const sh = e.target.closest('[data-show]');
+    if (sh) { playerTeam = playerTeam === sh.dataset.show ? 'all' : sh.dataset.show; refresh(); return; }
     const rm = e.target.closest('[data-remove-player]');
     if (rm) {
       const pl = draft.players.find(x => x.id === rm.closest('tr').dataset.pid);
-      if (confirm(`Remove ${pl.name}?`)) { draft.players = draft.players.filter(x => x !== pl); refresh(); }
+      change(`${pl.name} removed.`, () => { draft.players = draft.players.filter(x => x !== pl); });
       return;
     }
     if (!e.target.closest('#np-add')) return;
     const name = body.querySelector('#np-name').value.trim();
-    if (!name) return alert('Enter the player’s name.');
+    if (!name) { body.querySelector('#np-name').focus(); return toast('Enter the player’s name.', { kind: 'err' }); }
     const next = Math.max(-1, ...draft.players.map(x => parseInt(x.id, 10)).filter(Number.isFinite)) + 1;
     const clamp10 = v => Math.max(1, Math.min(10, Math.round(+v) || 5));
     draft.players.push({ id: String(next).padStart(4, '0'), name, team: body.querySelector('#np-team').value, position: body.querySelector('#np-pos').value,
       offense: clamp10(body.querySelector('#np-off').value), defense: clamp10(body.querySelector('#np-def').value) });
+    toast(`${name} added.`, { kind: 'ok' });
     refresh();
+    panel.querySelector('#np-name')?.focus();   // ready for the next one
   };
 }
 
@@ -833,15 +1043,22 @@ function historyTab(body) {
 }
 
 async function restoreVersion(sha, when, btn) {
-  if (publishing) return alert('Wait for the current save to finish, then try again.');
-  if (!confirm(`Put the league back to how it was on ${when}? Anything changed since then is replaced (you can restore it again from this list).`)) return;
-  btn.disabled = true; btn.textContent = 'Restoring…';
+  if (publishing) return toast('Wait for the current save to finish, then try again.', { kind: 'err' });
+  btn.disabled = true; btn.textContent = 'Loading…';
   try {
     const raw = await fetch(`https://api.github.com/repos/${REPO}/contents/${SEASON_FILE}?ref=${sha}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' }, cache: 'no-store',
     });
     if (!raw.ok) throw new Error(`GitHub: couldn't read that version (${raw.status})`);
     const old = await raw.json();
+    // Say what restoring would actually change, before doing it.
+    const what = describeChanges(draft, old, []);
+    if (!await ask({ title: `Restore the version from ${when}?`, text: 'The league goes back exactly as it was then, including match files, and publishes. You can undo this by restoring the version above it.',
+      html: `<p><b>Compared with now:</b> ${esc(what === 'saved' ? 'no differences in fixtures, teams or players' : what)}.</p>`, ok: 'Restore', danger: true })) {
+      btn.disabled = false; btn.textContent = 'Restore';
+      return;
+    }
+    btn.textContent = 'Restoring…';
     // Bring back any match files that have been deleted since.
     const wanted = [...new Set((old.fixtures || []).map(f => f.file).filter(Boolean))];
     if (wanted.length) {
@@ -863,10 +1080,10 @@ async function restoreVersion(sha, when, btn) {
     draft = old;
     nextMessage = `Edit mode: restore the version from ${when}`;
     historyList = null;
-    tab = 'fixtures';
-    refresh();
+    toast(`Restored the version from ${when}. Publishing…`, { kind: 'ok' });
+    go('fixtures', 'list');
   } catch (e) {
-    alert(`Couldn't restore: ${e.message}`);
+    toast(`Couldn't restore: ${e.message}`, { kind: 'err' });
     btn.disabled = false; btn.textContent = 'Restore';
   }
 }
@@ -927,7 +1144,7 @@ function teamsTab(body) {
     const m = (draft.managers || {})[t.code], players = (draft.players || []).filter(p => p.team === t.code).length;
     return `<details class="team-card" data-i="${i}" data-code="${esc(t.code)}"${openTeams.has(t.code) ? ' open' : ''}>
       <summary><span class="sw" style="background:${esc(safeColour(t.colour))}"></span><b>${esc(t.name)}</b><span class="ed-hint">${esc(t.code)} · ${esc(t.manager || 'no manager')} · ${players} players</span>
-        <span class="login-chip ${m ? 'on' : ''}">${m ? 'Login set' : 'No login'}</span></summary>
+        ${t.withdrawn ? '<span class="login-chip">Withdrawn</span>' : `<span class="login-chip ${m ? 'on' : ''}">${m ? 'Login set' : 'No login'}</span>`}</summary>
       <div class="team-body">
         <div class="ed-sub"><h4>Club</h4>
           <div class="ed-row"><label class="ed-field" style="flex:1 1 180px">Team name<input class="ed-input" data-k="name" value="${esc(t.name)}"></label>
@@ -943,7 +1160,8 @@ function teamsTab(body) {
         <div class="ed-sub"><h4>Questions for this manager</h4>
           ${qsFor(t.code).map(q => `<div class="q-row"><span>${esc(q.q)}</span><button class="ed-btn small danger" data-act="del-q" data-q="${esc(q.id)}" aria-label="Delete question">✕</button></div>`).join('') || '<p class="ed-hint">None yet. The media also asks automatic questions after each match.</p>'}
           <div class="ed-row"><input class="ed-input" style="flex:1 1 240px" data-newq placeholder="Ask ${esc(t.manager || 'the manager')} a question…" maxlength="300"><button class="ed-btn small" data-act="add-q">Ask</button></div></div>
-        <div class="ed-row" style="justify-content:flex-end"><button class="ed-btn small danger" data-act="remove-team">Remove ${esc(t.name)}</button></div>
+        <div class="ed-row" style="justify-content:flex-end">${t.withdrawn ? `<button class="ed-btn small" data-act="reinstate">Reinstate ${esc(t.name)}</button>`
+          : `<button class="ed-btn small danger" data-act="remove-team">${draft.fixtures.some(f => f.result && (f.home === t.code || f.away === t.code)) ? 'Withdraw' : 'Remove'} ${esc(t.name)}</button>`}</div>
       </div></details>`;
   };
   body.innerHTML = `<div class="ed-section"><h3>Teams</h3>
@@ -964,9 +1182,18 @@ function teamsTab(body) {
     const cardEl = e.target.closest('.team-card[data-i]');
     if (!cardEl) return;
     const t = draft.teams[+cardEl.dataset.i];
-    if (e.target.dataset.k) { t[e.target.dataset.k] = e.target.value; refresh(); }
+    if (e.target.dataset.k) {
+      const k = e.target.dataset.k, v = e.target.value.trim();
+      if (k === 'name' && !v) { e.target.value = t.name; return toast('A team needs a name.', { kind: 'err' }); }
+      t[k] = k === 'colour' ? e.target.value : v;
+      // Update the card header in place (no re-render), so Tab carries on to the next field.
+      cardEl.querySelector('summary b').textContent = t.name;
+      cardEl.querySelector('summary .sw').style.background = safeColour(t.colour);
+      touch();
+    }
     if (e.target.dataset.logo !== undefined && e.target.files[0]) {
       uploads.set(`assets/teams/${t.code.toLowerCase()}${e.target.dataset.logo}.png`, e.target.files[0]);
+      toast(`New logo for ${t.name} will publish in a moment.`, { kind: 'ok' });
       refresh();
     }
   };
@@ -977,40 +1204,54 @@ function teamsTab(body) {
     const act = b.dataset.act;
     if (act === 'set-login') {
       const email = cardEl.querySelector('[data-login="email"]').value.trim(), pin = cardEl.querySelector('[data-login="pin"]').value.trim();
-      if (!/^\S+@\S+\.\S+$/.test(email)) return alert('Enter the manager’s email address.');
-      if (!/^\d{4,}$/.test(pin)) return alert('Use a PIN of at least 4 digits.');
+      if (!/^\S+@\S+\.\S+$/.test(email)) { cardEl.querySelector('[data-login="email"]').focus(); return toast('Enter the manager’s email address.', { kind: 'err' }); }
+      if (!/^\d{4,}$/.test(pin)) { cardEl.querySelector('[data-login="pin"]').focus(); return toast('Use a PIN of at least 4 digits.', { kind: 'err' }); }
       b.disabled = true; b.textContent = 'Saving…';
       const salt = newSalt();
       draft.managers = { ...(draft.managers || {}), [t.code]: { salt, hash: await loginHash(salt, email, pin), set: new Date().toISOString().slice(0, 10) } };
-      alert(`Login saved for ${t.name}.\n\nEmail: ${email}\nPIN: ${pin}\n\nSend these to the manager. They can't be viewed again.`);
       refresh();
+      const note = `Heineken C League Manager Hub login for ${t.name}\nSign in at: ${new URL('manager.html', location.href).href}\nEmail: ${email}\nPIN: ${pin}`;
+      await info({ title: `Login saved for ${t.name}`, copy: note,
+        html: `<p>Send these to the manager now. They <b>can't be viewed again</b>: only a scrambled check is stored.</p><pre class="ed-copy">${esc(note)}</pre>` });
     }
-    if (act === 'clear-login' && confirm(`Remove the manager login for ${t.name}? They won't be able to sign in until you set a new one.`)) { delete draft.managers[t.code]; if (!Object.keys(draft.managers).length) delete draft.managers; refresh(); }
+    if (act === 'clear-login') change(`Manager login for ${t.name} removed.`, () => { delete draft.managers[t.code]; if (!Object.keys(draft.managers).length) delete draft.managers; });
     if (act === 'add-q' || act === 'add-q-all') {
       const input = act === 'add-q' ? cardEl.querySelector('[data-newq]') : body.querySelector('#q-all'), q = input.value.trim();
       if (!q) return input.focus();
       (draft.press_questions ||= []).push({ id: Date.now().toString(36), team: act === 'add-q' ? t.code : 'all', q, date: new Date().toISOString().slice(0, 10) });
       refresh();
     }
-    if (act === 'del-q') { draft.press_questions = (draft.press_questions || []).filter(q => q.id !== b.dataset.q); refresh(); }
+    if (act === 'del-q') change('Question deleted.', () => { draft.press_questions = (draft.press_questions || []).filter(q => q.id !== b.dataset.q); });
     if (act === 'remove-team') {
+      const mine = f => f.home === t.code || f.away === t.code;
+      const played = draft.fixtures.filter(f => mine(f) && f.result), unplayed = draft.fixtures.filter(f => mine(f) && !f.result);
       const players = (draft.players || []).filter(p => p.team === t.code).length;
-      const fixtures = draft.fixtures.filter(f => f.home === t.code || f.away === t.code).length;
-      const also = [players && `${players} player${players > 1 ? 's' : ''}`, fixtures && `${fixtures} fixture${fixtures > 1 ? 's' : ''}`].filter(Boolean);
-      if (!confirm(`Remove ${t.name}?${also.length ? ` This also removes its ${also.join(' and ')}.` : ''}`)) return;
-      draft.teams = draft.teams.filter(x => x !== t);
-      draft.players = (draft.players || []).filter(p => p.team !== t.code);
-      draft.fixtures = draft.fixtures.filter(f => f.home !== t.code && f.away !== t.code);
-      if (draft.managers) delete draft.managers[t.code];
-      if (draft.press_questions) draft.press_questions = draft.press_questions.filter(q => q.team !== t.code);
-      refresh();
+      if (played.length) {
+        // A team with results is withdrawn, not deleted: its played matches stay in the record.
+        if (!await ask({ title: `Withdraw ${t.name}?`, text: `Its ${played.length} played match${played.length > 1 ? 'es stay' : ' stays'} in the results and table. ${unplayed.length ? `Its ${unplayed.length} unplayed fixture${unplayed.length > 1 ? 's are' : ' is'} removed. ` : ''}Its manager login is removed. Players stay listed with the team.`, ok: 'Withdraw team', danger: true })) return;
+        change(`${t.name} withdrawn.`, () => {
+          t.withdrawn = true;
+          draft.fixtures = draft.fixtures.filter(f => !(mine(f) && !f.result));
+          if (draft.managers) { delete draft.managers[t.code]; if (!Object.keys(draft.managers).length) delete draft.managers; }
+        });
+        return;
+      }
+      const also = [players && `${players} player${players > 1 ? 's' : ''}`, unplayed.length && `${unplayed.length} fixture${unplayed.length > 1 ? 's' : ''}`].filter(Boolean);
+      change(`${t.name} removed${also.length ? `, with its ${also.join(' and ')}` : ''}.`, () => {
+        draft.teams = draft.teams.filter(x => x !== t);
+        draft.players = (draft.players || []).filter(p => p.team !== t.code);
+        draft.fixtures = draft.fixtures.filter(f => !mine(f));
+        if (draft.managers) { delete draft.managers[t.code]; if (!Object.keys(draft.managers).length) delete draft.managers; }
+        if (draft.press_questions) draft.press_questions = draft.press_questions.filter(q => q.team !== t.code);
+      });
     }
+    if (act === 'reinstate') change(`${t.name} reinstated.`, () => { delete t.withdrawn; });
   };
   body.querySelector('#nt-add').onclick = () => {
     const code = body.querySelector('#nt-code').value.trim().toUpperCase(), name = body.querySelector('#nt-name').value.trim();
-    if (!/^[A-Z0-9]{2,4}$/.test(code)) return alert('Use a 2-4 letter team code.');
-    if (draft.teams.some(t => t.code === code)) return alert('That code is already used.');
-    if (!name) return alert('Enter the team name.');
+    if (!/^[A-Z0-9]{2,4}$/.test(code)) return toast('Use a 2-4 letter team code.', { kind: 'err' });
+    if (draft.teams.some(t => t.code === code)) return toast('That code is already used.', { kind: 'err' });
+    if (!name) return toast('Enter the team name.', { kind: 'err' });
     draft.teams.push({ code, name, manager: body.querySelector('#nt-man').value.trim(), colour: body.querySelector('#nt-col').value });
     openTeams.delete('__new'); openTeams.add(code);
     refresh();
@@ -1036,10 +1277,24 @@ function settingsTab(body) {
     <div class="ed-section"><h3>This device</h3><p class="ed-hint">The access token is stored encrypted in this browser. Forget it if this isn't your device.</p>
       <div class="ed-row"><button class="ed-btn danger" id="forget">Forget this device</button></div></div>`;
   body.onchange = e => {
-    const k = e.target.dataset.k, pk = e.target.dataset.p;
-    if (k) draft[k] = e.target.type === 'number' ? +e.target.value : e.target.value;
-    if (pk) { draft.points = { ...(draft.points || { win: 3, draw: 1, loss: 0 }), [pk]: +e.target.value }; }
-    if (k || pk) refresh();
+    const k = e.target.dataset.k, pk = e.target.dataset.p, el = e.target;
+    // Numbers must be whole and in range; an empty or bad value puts the old one back.
+    const num = (old, min, max) => {
+      const v = Number(el.value);
+      if (el.value.trim() === '' || !Number.isInteger(v) || v < min || v > max) { el.value = old; toast(`Enter a whole number from ${min} to ${max}.`, { kind: 'err' }); return null; }
+      return v;
+    };
+    if (k) {
+      const v = el.type === 'number' ? num(draft[k] ?? (k === 'live_minutes' ? 10 : 1), 1, k === 'live_minutes' ? 120 : 99) : el.value.trim();
+      if (v === null) return;
+      draft[k] = v;
+    }
+    if (pk) {
+      const pts = draft.points || { win: 3, draw: 1, loss: 0 }, v = num(pts[pk], -10, 10);
+      if (v === null) return;
+      draft.points = { ...pts, [pk]: v };
+    }
+    if (k || pk) touch();   // no re-render, so Tab moves on normally
   };
   body.querySelector('#relay-test').onclick = async () => {
     const out = body.querySelector('#relay-status');
@@ -1050,8 +1305,8 @@ function settingsTab(body) {
       out.innerHTML = r.ok ? '<span class="ed-ok">✓ The relay is working.</span>' : `<span class="ed-err">${esc(r.error || 'Unexpected reply')}</span>`;
     } catch { out.innerHTML = '<span class="ed-err">Couldn’t reach it. Check the link, and that the deployment is set to “Anyone”.</span>'; }
   };
-  body.querySelector('#forget').onclick = () => {
-    if (!confirm('Remove the saved access token from this browser? You will need to set edit mode up again.')) return;
+  body.querySelector('#forget').onclick = async () => {
+    if (!await ask({ title: 'Forget this device?', text: 'This removes the saved access token from this browser. You’ll need a GitHub token to set edit mode up again.', ok: 'Forget this device', danger: true })) return;
     localStorage.removeItem(STORE);
     lock();
   };
@@ -1071,13 +1326,15 @@ function setState(state, msg) { liveState = state; liveMsg = msg; if (panel) sho
 function showState() {
   const box = panel.querySelector('.ed-pending'), n = pendingCount();
   if (publishing || liveState === 'saving' || liveState === 'failed') box.innerHTML = liveMsg;
+  else if (n && autoBlocked) box.innerHTML = `<span class="ed-err">${n} change${n > 1 ? 's' : ''} not published. Press Publish now.</span>`;
+  else if (n && holds.size) box.innerHTML = `<span class="ed-wait">${n} change${n > 1 ? 's' : ''} waiting. ${holds.has('sim') ? 'Publishing when the simulation finishes.' : 'Publishing once the Undo option closes.'}</span>`;
   else if (n) box.innerHTML = `<span class="ed-wait">${n} change${n > 1 ? 's' : ''}, publishing automatically…</span>`;
   else box.innerHTML = liveMsg || '<span class="ed-ok">✓ Everything is live</span>';
 }
 
 function scheduleAutoPublish() {
   clearTimeout(autoTimer);
-  if (!token || !pendingCount() || autoBlocked || holdAuto) return;
+  if (!token || !pendingCount() || autoBlocked || holds.size) return;
   autoTimer = setTimeout(() => publish(), AUTO_DELAY);
   if (panel) showState();
 }
@@ -1098,9 +1355,11 @@ async function publish() {
     });
     if (!raw.ok) throw new Error(`GitHub: couldn't read the current league data (${raw.status})`);
     const remote = await raw.json();
-    if ((remote.updated || '') > (base.updated || '') && !confirm('The league data was changed somewhere else since you opened edit mode. Publishing will overwrite those changes. Continue?')) {
+    if ((remote.updated || '') > (base.updated || '') && !await ask({ title: 'The league was changed elsewhere',
+      text: 'Someone published changes (from another device or github.com) since you opened edit mode. Publishing now overwrites them. To keep both, reload the page instead: your changes stay saved on this device and you’ll be offered them back.',
+      ok: 'Overwrite and publish', cancel: 'Don’t publish yet', danger: true })) {
       autoBlocked = true;
-      setState('failed', '<span class="ed-err">Not published: the league was changed elsewhere. Reload the page to get the latest.</span>');
+      setState('failed', '<span class="ed-err">Not published: the league was changed elsewhere. Reload the page to get the latest; your changes are kept on this device.</span>');
       return;
     }
     snap.updated = draft.updated = new Date().toISOString().slice(0, 19);
@@ -1124,11 +1383,12 @@ async function publish() {
     historyList = null;
     for (const [path, blob] of sentUploads) if (uploads.get(path) === blob) uploads.delete(path);
     (window.hclPublished ||= new Set()).add(snap.updated);
+    saveDraft();   // clears the saved copy once nothing is left unpublished
     watchLive(snap.updated);
   } catch (e) {
     setState('failed', `<span class="ed-err">Not published: ${esc(e.message)}</span>`);
     autoBlocked = true;   // no auto-retry loop; 'Publish now' clears this
-    alert(`Publishing failed: ${e.message}\n\nYour changes are still here. Press "Publish now" to try again.`);
+    toast(`Publishing failed: ${e.message}. Your changes are still here and saved on this device. Press Publish now to try again.`, { kind: 'err', ms: 15000 });
   } finally {
     publishing = false;
     refresh();
@@ -1168,6 +1428,12 @@ async function watchLive(stamp) {
 function boot() {
   if (!root()) return;   // edit mode only runs on admin.html
   try { token = sessionStorage.getItem(SESSION); } catch { token = null; }
+  readHash();
+  window.addEventListener('hashchange', () => { readHash(); refresh(); });
+  // An open ⋯ menu closes when you click anywhere else or press Escape.
+  const closeMenus = keep => document.querySelectorAll('.ed-menu[open]').forEach(d => { if (d !== keep) d.open = false; });
+  document.addEventListener('click', e => closeMenus(e.target.closest('.ed-menu')));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(null); });
   if (token) startEditing(); else showLocked();
   window.addEventListener('beforeunload', e => { if (pendingCount() || publishing) { e.preventDefault(); e.returnValue = ''; } });
 }

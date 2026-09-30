@@ -184,6 +184,69 @@
 .fx-chip.tbc { background: rgba(255,255,255,.07); color: var(--muted); }
 .fx-actions .ed-input { width: auto; flex: 1 1 130px; min-width: 0; padding: 6px 8px; font-size: .78rem; }
 
+/* ---------- Shared admin UI (js/admin-ui.js): toasts, dialogs ---------- */
+.ed-toasts { position: fixed; z-index: 70; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.ed-toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 14px; background: #1b2029; border: 1px solid var(--glass-border); border-left: 4px solid var(--muted); box-shadow: 0 16px 40px rgba(0,0,0,.5); font-size: .85rem; font-weight: 600; animation: ed-in .18s ease-out; }
+.ed-toast > span { flex: 1; min-width: 0; }
+.ed-toast.ok { border-left-color: var(--final); }
+.ed-toast.err { border-left-color: #ef4444; }
+.ed-toast.out { opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; }
+.ed-toast-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: .9rem; padding: 4px 6px; border-radius: 6px; }
+@keyframes ed-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .ed-toast { animation: none; } .ed-toast.out { transition: none; } }
+.ed-dlg-actions { justify-content: flex-end; margin-top: 4px; }
+.ed-btn.danger.solid { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.ed-btn.danger.solid:hover { background: #dc2626; color: #fff; }
+.ed-info { display: grid; gap: 8px; font-size: .84rem; color: var(--muted); }
+.ed-info p { margin: 0; }
+.ed-copy { margin: 0; padding: 10px 12px; border-radius: 10px; background: #0b0d11; border: 1px solid var(--glass-border); color: var(--text); font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+
+/* Keyboard focus is always visible */
+.ed-panel :is(button, a, summary, input, select, textarea):focus-visible, .ed-modal :is(button, a, input, select, textarea):focus-visible, .ed-toast button:focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+
+/* Publish status pill */
+.ed-pending:not(:empty) > span { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.05); }
+
+/* Tabs: badge, sub-views, scroll hint on phones */
+.ed-badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: #ef4444; color: #fff; font-size: .68rem; line-height: 18px; text-align: center; }
+.ed-subnav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.ed-subnav::-webkit-scrollbar { display: none; }
+.ed-subbody { display: grid; gap: 16px; align-content: start; }
+@media (max-width: 899px) {
+  .ed-tabs { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); scrollbar-width: none; }
+  .ed-tabs::-webkit-scrollbar { display: none; }
+}
+.ed-empty { display: grid; justify-items: start; gap: 8px; padding: 18px; border-radius: 14px; border: 1px dashed rgba(255,255,255,.18); }
+
+/* Bigger touch targets on touch screens */
+@media (pointer: coarse) {
+  .ed-btn.small { min-height: 40px; padding: 8px 12px; }
+  .ed-tabs button, .fx-filter { min-height: 44px; }
+}
+
+/* ⋯ menu on fixture cards */
+.ed-menu { position: relative; }
+.ed-menu > summary { list-style: none; }
+.ed-menu > summary::-webkit-details-marker { display: none; }
+.ed-menu-list { position: absolute; z-index: 20; right: 0; top: calc(100% + 6px); min-width: 220px; display: grid; padding: 6px; border-radius: 12px; background: #1b2029; border: 1px solid var(--glass-border); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+.ed-menu-item { text-align: left; background: none; border: 0; padding: 10px 12px; border-radius: 8px; font-size: .84rem; font-weight: 700; cursor: pointer; color: var(--text); }
+.ed-menu-item:hover, .ed-menu-item:focus-visible { background: rgba(255,255,255,.07); }
+.ed-menu-item.danger { color: #f87171; }
+.ed-menu-item.danger:first-of-type, .ed-menu-item:not(.danger) + .ed-menu-item.danger { margin-top: 4px; border-top: 1px solid rgba(255,255,255,.06); border-radius: 0 0 8px 8px; }
+/* On phones the menu spans the card's action row, so it never runs off-screen. */
+@media (max-width: 520px) { .fx-actions { position: relative; } .fx-actions .ed-menu { position: static; } .fx-actions .ed-menu-list { left: 0; right: 0; min-width: 0; } }
+
+/* Needs attention */
+.att-list { display: grid; gap: 8px; }
+.att-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); font-size: .86rem; flex-wrap: wrap; }
+.att-text { flex: 1 1 240px; min-width: 0; }
+.att-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--upcoming); }
+.att-item.red .att-dot { background: #ef4444; }
+
+/* Squad chips are buttons (they filter the player list) */
+button.squad-chip { border: 1px solid transparent; cursor: pointer; }
+button.squad-chip[aria-pressed="true"] { border-color: currentColor; }
+
 /* ---------- News tab (js/admin-news.js); posts themselves (nw-*) are styled in css/news.css ---------- */
 .na-list { display: grid; gap: 8px; }
 .na-item { display: flex; align-items: stretch; gap: 12px; padding: 10px 12px 10px 0; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); overflow: hidden; }
@@ -246,3 +309,43 @@
 .na-ans-img { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: rgba(255,255,255,.05); }
 .na-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 5px; vertical-align: -3px; border: 1px solid rgba(255,255,255,.2); }
 @media (max-width: 640px) { .na-ans tbody th { width: auto; } .na-item { flex-wrap: wrap; } }
+/* Editor card tools sit beside the summary (not inside it) */
+.na-cardw { position: relative; }
+.na-cardw > .na-tools { position: absolute; top: 6px; right: 8px; }
+.na-cardw:has(> .na-tools) > .na-card > summary { padding-right: 118px; }
+.na-seg button[aria-checked="true"] { border-color: var(--brand-2); background: rgba(56,189,248,.08); }
+.na-area[readonly] { opacity: .6; cursor: not-allowed; }
+/* Action row: Back, the main action, and a ⋯ menu for the rest */
+.na-actions { align-items: center; }
+.na-more { position: relative; }
+.na-more > summary { list-style: none; cursor: pointer; }
+.na-more > summary::-webkit-details-marker { display: none; }
+.na-menu { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 190px; display: grid; padding: 6px; border-radius: 12px; background: #151922; border: 1px solid var(--glass-border); box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+.na-menu button { text-align: left; padding: 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+.na-menu button:hover, .na-menu button:focus-visible { background: rgba(255,255,255,.06); }
+.na-menu button.danger { color: #f87171; }
+/* Send checklist */
+.na-ready { margin: 0; font-size: .8rem; font-weight: 700; }
+.na-ready.ok { color: #6ee7b7; }
+.na-ready.bad { list-style: none; padding: 0; display: grid; gap: 2px; color: #fbbf24; }
+/* Phones and tablets: Edit / Preview toggle instead of the preview under the whole editor */
+@media (min-width: 1100px) { .na-panes { display: none; } }
+@media (max-width: 1099px) {
+  .na-grid[data-pane="edit"] > .na-preview { display: none; }
+  .na-grid[data-pane="preview"] > .na-editor { display: none; }
+  .na-prev-body { max-height: none; }
+}
+.na-diff { margin: 6px 0; padding-left: 18px; display: grid; gap: 4px; font-size: .85rem; }
+
+/* League tab (js/admin-league.js) */
+.lg-sec > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.lg-sec > summary::-webkit-details-marker { display: none; }
+.lg-sec > summary::before { content: '▸'; color: var(--muted); transition: transform .15s; }
+.lg-sec[open] > summary::before { transform: rotate(90deg); }
+.lg-sec > summary h3 { margin: 0; }
+.lg-count { font-size: .72rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.08); color: var(--muted); }
+.lg-body { display: grid; gap: 10px; margin-top: 10px; }
+.lg-seeds { margin: 0 0 10px; padding-left: 22px; display: grid; gap: 4px; }
+.lg-list { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.lg-preview:empty { display: none; }
+.lg-preview { font-size: .82rem; }
