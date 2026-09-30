@@ -23,7 +23,7 @@ function metersCard() {
   }).filter(Boolean);
   if (!cards.length) return '';
   return `<section class="card stack" style="gap:14px"><h2 class="card-title" style="margin:0">Press meters <span>next match</span></h2>
-    <p class="muted" style="font-size:.8rem;margin:0">What a manager says since their last match moves the fans and the dressing room, and nudges how sharp the team plays (up to ±5%). Sharp, true jabs can rattle the next opponent; empty trash talk fires them up. Repeats count once, and answering the media counts more than statements.</p>
+    <p class="muted" style="font-size:.8rem;margin:0">What a manager says since their last match moves the fans and the dressing room, and nudges how sharp the team plays (up to ±3%). Sharp, true jabs can rattle the next opponent; empty trash talk fires them up. Repeats count once, and answering the media counts more than statements.</p>
     <div class="press-teams">${cards.join('')}</div></section>`;
 }
 

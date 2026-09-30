@@ -130,13 +130,13 @@ class Form(unittest.TestCase):
         from hcl_sim.teams import FORM_ATTRS, build_team
         base = {p.id: dict(p.attrs) for p in build_team(synthetic_league(), 'AAA').players}
         league = synthetic_league()
-        league['tactics']['AAA'] = {'form': 0.04}
+        league['tactics']['AAA'] = {'form': 0.02}
         team = build_team(league, 'AAA')
-        self.assertEqual(team.form, 0.04)
+        self.assertEqual(team.form, 0.02)
         self.assertNotIn('form', team.tactics)
         for p in team.players:
             for k, v in base[p.id].items():
-                want = round(max(1.0, min(99.0, v * 1.04)), 1) if k in FORM_ATTRS else v
+                want = round(max(1.0, min(99.0, v * 1.02)), 1) if k in FORM_ATTRS else v
                 self.assertEqual(p.attrs[k], want, k)
         for k in ('pace', 'acceleration', 'stamina', 'strength', 'agility', 'aggression'):
             self.assertNotIn(k, FORM_ATTRS)
@@ -145,7 +145,7 @@ class Form(unittest.TestCase):
 
     def test_form_is_clamped(self):
         from hcl_sim.teams import build_team
-        for given, want in ((0.2, 0.05), (-1, -0.05), (0.03, 0.03), ('0.03', 0.0), (None, 0.0)):
+        for given, want in ((0.2, 0.03), (-1, -0.03), (0.02, 0.02), ('0.03', 0.0), (None, 0.0)):
             league = synthetic_league()
             league['tactics']['AAA'] = {'form': given}
             self.assertEqual(build_team(league, 'AAA').form, want, given)
@@ -164,7 +164,7 @@ class Form(unittest.TestCase):
         league = synthetic_league()
         league['tactics']['BBB'] = {'form': -0.09}
         m = simulate(league, 'AAA', 'BBB', seed=5, include_frames=False)
-        self.assertEqual(m['teams']['away']['form'], -0.05)
+        self.assertEqual(m['teams']['away']['form'], -0.03)
         self.assertNotIn('form', m['teams']['home'])
         self.assertNotIn('form', m['teams']['away']['tactics'])
 

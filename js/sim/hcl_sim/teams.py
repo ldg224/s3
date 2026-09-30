@@ -9,7 +9,7 @@ from .models import Player, Team
 FORM_ATTRS = ('composure', 'decisions', 'passing', 'first_touch', 'finishing', 'long_shots', 'tackling',
               'marking', 'positioning', 'work_rate', 'crossing', 'dribbling', 'vision', 'heading',
               'reflexes', 'handling', 'gk_positioning', 'diving')
-FORM_CAP = 0.05   # form is clamped to +/- 5%
+FORM_CAP = 0.03   # form is clamped to +/- 3% (docs/PRESS_EFFECT.md)
 
 
 def _form(value):

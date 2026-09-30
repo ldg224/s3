@@ -14,7 +14,9 @@ export const SIGNALS = ['confidence', 'arrogance', 'humility', 'accountability',
 
 // Limits (docs/PRESS_EFFECT.md "Anti-spam limits").
 export const LIMITS = {
-  perf: 0.04, oppPerf: 0.03, final: 0.05,     // fractions
+  // Measured on the engine (docs/PRESS_EFFECT.md "Strength"): ±3% moves a team's win chance by about
+  // 7 points at the cap. SCALE shrinks every performance number together, keeping their balance.
+  perf: 0.024, oppPerf: 0.018, final: 0.03, SCALE: 0.6,     // fractions
   meter: 100, carry: 0.6,                     // fans / happiness range, share kept per match
   counted: 6, decay: 0.6,                     // items that count, and their weights 1, .6, .36 …
   jabs: 2, similar: 0.55, minWords: 6, volume: 8,
@@ -694,7 +696,7 @@ export function pressEffect(season, files, fixture, opts = {}) {
     const L = LIMITS.meter;
     const fansNow = clamp(c.fans * LIMITS.carry + fans, -L, L), happyNow = clamp(c.happiness * LIMITS.carry + happy, -L, L);
     const home = code === H;
-    let perf = 0.022 * (happyNow / L) + (home ? 0.012 : 0.005) * (fansNow / L) + 0.006 * s.confidence - 0.008 * Math.max(0, s.arrogance);
+    let perf = LIMITS.SCALE * (0.022 * (happyNow / L) + (home ? 0.012 : 0.005) * (fansNow / L) + 0.006 * s.confidence - 0.008 * Math.max(0, s.arrogance));
     perf = clamp(perf, -LIMITS.perf, LIMITS.perf);
 
     // Mind games: the strongest two jabs at the next opponent.
@@ -716,13 +718,13 @@ export function pressEffect(season, files, fixture, opts = {}) {
     from.jabs.forEach((x, i) => {
       const k = i ? 0.6 : 1, jab = x.r.signals.jab;
       if (x.r.signals.credible > x.r.signals.empty) {
-        let v = -0.02 * jab * (0.5 + 0.5 * x.r.signals.credible) * k;
+        let v = -0.02 * LIMITS.SCALE * jab * (0.5 + 0.5 * x.r.signals.credible) * k;
         v *= 1 - Math.max(0, to.happyNow) / 200;
         if (calm) v *= 0.5;
         eff += v;
         notes.push({ v: pct(v), quote: x.text.slice(0, 120), why: `hit a nerve${calm ? ', but they stayed calm' : ''}` });
       } else {
-        const v = 0.012 * jab * k;
+        const v = 0.012 * LIMITS.SCALE * jab * k;
         eff += v;
         notes.push({ v: pct(v), quote: x.text.slice(0, 120), why: 'nothing behind it: fired them up' });
       }
@@ -753,7 +755,7 @@ export const formFor = effect => (effect ? { home: effect.home.final, away: effe
 
 // ---------------------------------------------------------------- display helpers
 
-// Colour tone for a value: 'up' | 'down' | 'flat' (meters: ±100; fractions: ±0.05).
+// Colour tone for a value: 'up' | 'down' | 'flat' (meters: ±100; fractions: ±LIMITS.final).
 export function tone(v, scale = 100) {
   const x = v / scale;
   return x >= 0.05 ? 'up' : x <= -0.05 ? 'down' : 'flat';
@@ -761,7 +763,7 @@ export function tone(v, scale = 100) {
 export const fmtPct = v => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v * 100).toFixed(1)}%`;
 export const fmtMeter = v => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(Math.round(v))}`;
 export function moodLabel(kind, v) {
-  const x = kind === 'perf' ? v / 0.04 : v / 100;
+  const x = kind === 'perf' ? v / LIMITS.perf : v / 100;
   const bands = {
     fans: ['Furious', 'Unhappy', 'Steady', 'Behind the team', 'Buzzing'],
     happiness: ['Broken', 'Fractured', 'Settled', 'Happy', 'Fired up'],

@@ -10,16 +10,23 @@ built-in rules only (no outside service). Status: in progress (Alpha), 2026-09-3
 |---|---|---|---|
 | **Fans** | -100 … +100 | Yes, drifts back toward 0 by 40% per match | Results; respect for the fans; accountability after defeats; arrogance, excuses, rambling and spam annoy them; answering the media's questions |
 | **Team happiness** | -100 … +100 | Yes, drifts back 40% per match | Results; praising players (by name counts double); blaming players publicly; unity vs. division talk; confidence |
-| **Team performance** | -4.0% … +4.0% | No, next match only | Mostly happiness, a little fans (home games count fans more), minus pressure from overhyping |
-| **Opposition performance** | -3.0% … +3.0% | No, next match only | Mind games aimed at the next opponent: a well-aimed, credible jab can rattle them; empty trash talk fires them up (backfires) |
+| **Team performance** | -2.4% … +2.4% | No, next match only | Mostly happiness, a little fans (home games count fans more), minus pressure from overhyping |
+| **Opposition performance** | -1.8% … +1.8% | No, next match only | Mind games aimed at the next opponent: a well-aimed, credible jab can rattle them; empty trash talk fires them up (backfires) |
 
 A team's final performance change for a match = its own **team performance** + the **opposition
-performance** effect its opponent's manager put on it, clamped to **±5%**.
+performance** effect its opponent's manager put on it, clamped to **±3%**.
 
 In the engine, the change scales the skill attributes (not pace/strength, so physics stays
 realistic) of the team's players for that match: composure, decisions, passing, first_touch,
 finishing, long_shots, tackling, marking, positioning, work_rate, and the goalkeeping attributes.
-+5% on a 65 attribute is +3.25, about 0.65 of a 1-10 rating point on those skills only.
++3% on a 65 attribute is about +2, about 0.4 of a 1-10 rating point on those skills only.
+
+## Strength (measured)
+
+60 engine matches per setting between the two most even teams (LFC v LAU, 2026-09-30), first run at a ±5% cap:
+one team at +5% went from 37% to 48% wins; +5% against -5% went to 57/17/27; xG difference moved about
+0.09 per 1% of form, roughly linearly. So the cap was lowered to **±3%** (about +7 win points for one team at
+the cap, about +12 for the full swing). The engine clamps `form` to ±3% as well (FORM_CAP in teams.py).
 
 ## Which statements count
 
@@ -86,7 +93,7 @@ weighs 0.5.
    claims that rest on our own tactics ("they can't handle our press" with pressing set high) are
    half as credible, checked against the tactics saved when it was said. Only the strongest claim
    in a statement counts.
-5. **Hard caps** on every meter (table above), and ±5% on the final performance change.
+5. **Hard caps** on every meter (table above), and ±3% on the final performance change.
 6. **Volume penalty.** More than 8 items in a window → fans −(n−8)×3, up to −20. Repeats cost
    fans 4 each, up to −25. Only the newest 60 items are read.
 7. **Kitchen-sink cap.** One statement's signals add up to at most 2.5.

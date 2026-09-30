@@ -162,7 +162,7 @@ function pressCard() {
   if (!p) return '';
   return `<section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Press conference effect <span>${FX.result ? 'what went into this match' : 'so far, before kick-off'}</span></h2>
     <div class="press-two">${pressMeters(p.home, { opp: A.name, why: true, title: H.name })}${pressMeters(p.away, { opp: H.name, why: true, title: A.name })}</div>
-    <p class="muted" style="font-size:.78rem;margin:0">What each manager said in the <a href="press.html">press room</a> since their last match nudges fans, team happiness and how sharp the team plays (up to ±5%).${FX.result ? '' : ' It’s fixed when the match is played.'}</p></section>`;
+    <p class="muted" style="font-size:.78rem;margin:0">What each manager said in the <a href="press.html">press room</a> since their last match nudges fans, team happiness and how sharp the team plays (up to ±3%).${FX.result ? '' : ' It’s fixed when the match is played.'}</p></section>`;
 }
 
 // ---------- Page ----------
