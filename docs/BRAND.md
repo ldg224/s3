@@ -22,9 +22,10 @@ Never recolour, stretch or outline the crest, or put it on a busy photo without 
 
 ## Colour
 
-The brand colours are the Material Blue ramp and white. The page is a very dark navy and cards are a step
-lighter, so the site reads blue without being bright. Two earlier versions set the limits: bright blue
-everywhere was too much, flat near-black was too plain. No green, lime, gold, red, orange or purple for
+The brand colours are the Material Blue ramp and white. The page is near-black with a navy undertone and cards
+are a dark slate; blue is kept for accents (section titles, the active tab, buttons, links, the hero, the
+crest). Earlier versions set the limits: bright blue everywhere was too much, flat black too plain, and
+blue-washed cards still too much. No green, lime, gold, red, orange or purple for
 the league's own UI. **Team colours are the teams' own** and stay as they are (logos, kit colours, team accents).
 
 | Token | Hex | Use |
@@ -40,20 +41,24 @@ the league's own UI. **Team colours are the teams' own** and stay as they are (l
 | Blue 800 | `#1565c0` | Gradient end, raised panels |
 | Blue 900 | `#0d47a1` | Deep panels, headers |
 | Navy | `#061a38` | Text on white/light-blue fills (e.g. the LIVE pill), broadcast graphics |
-| Page | `#081225` | Page background (`--bg`): very dark navy |
-| Card | `#0e1a31` | Cards (`--surface`), with a soft Blue 600 wash at the top and a Blue 300 top edge |
-| Raised | `#15243f` | Hover rows, inputs, nested panels (`--surface-raised`) |
-| Blue-grey text | `#aebdd3` / `#7f93b0` | Secondary and faint text (`--muted`, `--faint`) |
+| Page | `#0a0f19` | Page background (`--bg`): near-black with a navy undertone |
+| Card | `#111827` | Cards (`--surface`) |
+| Raised | `#182133` | Hover rows, inputs, nested panels (`--surface-raised`) |
+| Grey text | `#b0bac9` / `#808b9c` | Secondary and faint text (`--muted`, `--faint`) |
 | White | `#ffffff` | **The accent**: headings, scores, LIVE, the most important thing on screen |
 
 Rules:
-- Background dark navy, cards a step lighter (`--bg`, `--surface`, `--surface-raised`). Text is white; secondary text blue-grey (`--muted`). Section titles (`.card-title`) are Blue 300.
+- Background near-black navy, cards dark slate (`--bg`, `--surface`, `--surface-raised`). Text is white; secondary text grey (`--muted`). Section titles (`.card-title`) are Blue 300.
 - Blue is for brand accents: the crest, primary buttons and active tabs, links, highlights, the W chip. Don't use it for large backgrounds on the site (the hero photo and broadcast graphics are the exceptions).
 - White is the accent: use it for what matters most (LIVE, the score, the primary heading). Blue does the rest.
 - Buttons: Blue gradient (`#42a5f5` → `#1565c0`) with **white** text. Never dark text on the gradient.
-- Match states without red or green: LIVE = white pill with navy text and the pulsing dot; upcoming =
-  Blue 400; played = Blue 200; postponed = outlined. Results W/D/L carry the letter (W filled Blue 400,
-  D Blue 800, L outlined), so they never rely on colour alone.
+- Not everything is blue. Things fans read with real-world colours keep them:
+  - results/form W/D/L: `--res-w` #22a55b green, `--res-d` #7c8594 grey, `--res-l` #e5484d red, letters kept;
+  - player match ratings: green high, amber mid, red low (like FotMob/Sofascore), except **Man of the Match,
+    whose rating sits on mid blue #1e88e5 with white text**;
+  - yellow and red cards, grass, team colours.
+- Match states: LIVE = white pill with navy text and the pulsing dot; upcoming = Blue 400; played = Blue 200;
+  postponed = outlined.
 - Up/down (press meters, form): up = white ▲, down = Blue 400 ▼, flat = Blue 200 ●. The arrow and sign carry the meaning.
 
 ## Type

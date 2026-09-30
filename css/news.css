@@ -97,7 +97,7 @@ h3.nw-h { font-size: 1.2rem; } h4.nw-h { font-size: 1.05rem; } h5.nw-h { font-si
 .nw-stats span { font-size: .66rem; color: var(--muted, var(--muted)); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
 .nw-form-dots { display: flex; justify-content: center; gap: 3px; }
 .nw-form-dots i { font-style: normal; font-size: .62rem; font-weight: 900; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 4px; color: var(--bg); }
-.nw-form-dots .W { background: #42a5f5; color: #061a38; } .nw-form-dots .D { background: #1565c0; color: #ffffff; } .nw-form-dots .L { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px #1976d2; }   /* docs/BRAND.md: W/D/L by letter and fill */
+.nw-form-dots .W { background: var(--res-w, #22a55b); color: #fff; } .nw-form-dots .D { background: var(--res-d, #7c8594); color: #fff; } .nw-form-dots .L { background: var(--res-l, #e5484d); color: #fff; }   /* real-world result colours */
 
 /* ---- Poll ---- */
 .nw-question { font-weight: 800; font-size: 1rem; }
