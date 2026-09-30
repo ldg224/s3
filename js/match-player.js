@@ -3,7 +3,7 @@
 // sped up, match file). Renderers live in js/highlights.js and js/broadcast.js; this file only
 // plays them onto the page. Nothing here runs until a match is live or finished.
 
-import { liveSimTime, liveSpeed, clockAt } from './data.js';
+import { liveSimTime, liveSpeed, clockAt, addedAt } from './data.js';
 import { esc, statusPill } from './ui.js';
 import { Replay } from './replay.js';
 
@@ -105,6 +105,7 @@ export class MatchPlayer {
       this.t = view === 'highlights' ? 0 : prevT ?? (this.st === 'live' ? liveSimTime(this.FX, this.S) : a);
     }
     this.playing = this.st === 'live' && view !== 'highlights';
+    this.follow = this.playing;   // watching live: the picture is locked to the live time
     if (tac && this.playing) this.tactical.play();
     this.speed = view === 'highlights' ? 1 : this.st === 'live' ? liveSpeed(this.FX, this.S) : this.speed > 1 ? this.speed : 4;
     if (tac) this.tactical.speed = this.speed;
@@ -168,7 +169,8 @@ export class MatchPlayer {
     const [a, b] = this.fullRange(), playing = this.view === 'tactical' ? this.tactical?.playing : this.playing;
     this.$('#mp-play').textContent = playing ? 'Pause' : 'Play';
     this.$('#mp-seek').value = this.t;
-    this.$('#mp-time').textContent = this.view === 'highlights' ? `${mmss(this.t)} / ${mmss(b)}` : clockAt(this.data.periods, this.t);
+    const extra = addedAt(this.data.periods, this.t);
+    this.$('#mp-time').textContent = this.view === 'highlights' ? `${mmss(this.t)} / ${mmss(b)}` : `${clockAt(this.data.periods, this.t)}${extra ? ` +${extra}` : ''}`;
     const big = this.$('#mp-big');
     big.hidden = playing || this.view === 'tactical';
     big.textContent = this.view === 'highlights' && this.t >= b - 0.05 ? '↻' : '▶';
@@ -183,11 +185,13 @@ export class MatchPlayer {
     if (this.t >= b - 0.05 && this.view === 'highlights') this.t = 0;
     this.playing = true; this.syncUi();
   }
-  pause() { if (this.view === 'tactical') this.tactical.pause(); this.playing = false; this.syncUi(); }
+  pause() { if (this.view === 'tactical') this.tactical.pause(); this.playing = false; this.follow = false; this.syncUi(); }
   seek(t) {
     if (this.view === 'tactical') { this.tactical.seek(t); this.t = this.tactical.t; return this.syncUi(); }
     const [a, b] = this.range();
-    this.t = Math.max(a, Math.min(t, b)); this.dirty = true; this.syncUi();
+    this.t = Math.max(a, Math.min(t, b)); this.dirty = true;
+    this.follow = this.st === 'live' && this.view !== 'highlights' && this.t >= liveSimTime(this.FX, this.S) - 2;   // seeking back stops following live
+    this.syncUi();
   }
   // A timeline row: jump there in the full-match view.
   jump(tSim) {
@@ -282,7 +286,11 @@ export class MatchPlayer {
     if (this.view === 'tactical' || !this.hl) return;
     if (this.playing) {
       const [, b] = this.range();
-      this.t += dt * this.speed;
+      // Following live, the picture shows exactly the live moment (the same time the score, clock and
+      // timeline on the page use). Adding up frame times drifted behind (slow first frames, a tab in
+      // the background), so the page showed goals before the video did.
+      if (this.follow && this.st === 'live' && this.view !== 'highlights') this.t = liveSimTime(this.FX, this.S);
+      else this.t += dt * this.speed;
       if (this.t >= b) { this.t = b; if (this.view === 'highlights' || this.st !== 'live') this.playing = false; }
       this.dirty = true;
     }

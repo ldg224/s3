@@ -170,3 +170,7 @@ body.mp-fs-open { overflow: hidden; }
 .mp-bar { height: 8px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
 .mp-bar span { display: block; height: 100%; width: 0; background: var(--brand-grad); transition: width .3s; }
 .mp-dl-progress .ctl { justify-self: start; }
+
+/* Added time (the fourth official's board) under the live clock */
+.sb-added { display: block; font-variant-numeric: tabular-nums; font-weight: 900; font-size: .8rem; color: #8fff06; }
+.sb-added:empty { display: none; }

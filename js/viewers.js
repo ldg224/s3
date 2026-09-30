@@ -25,13 +25,22 @@ function publish(counts) {
   window.dispatchEvent(new CustomEvent('viewers', { detail: counts }));
 }
 
+// Apps Script now and then answers with a Google "Page not found" page instead of the script's
+// reply, so a failed ping is retried a couple of times, and the last good counts stay up until
+// pings have been failing for two minutes.
+let lastGood = 0;
 async function ping() {
   if (document.hidden) return;
-  try {
-    const res = await fetch(url(), { cache: 'no-store' });
-    const out = await res.json();
-    publish(out.ok && Number.isFinite(out.site) ? { site: out.site, matches: out.matches || {} } : null);
-  } catch { publish(null); }   // relay not set up for counting yet, or offline
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url(), { cache: 'no-store' });
+      const out = await res.json();
+      if (out.ok && Number.isFinite(out.site)) { lastGood = Date.now(); return publish({ site: out.site, matches: out.matches || {} }); }
+      if (out.ok) break;   // an older relay without viewer counts: don't keep asking
+    } catch { /* Google's error page, or offline */ }
+    await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+  }
+  if (Date.now() - lastGood > 2 * 60 * 1000) publish(null);
 }
 
 export async function startViewers() {

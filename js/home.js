@@ -1,4 +1,4 @@
-import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, liveSimTime, clockAt } from './data.js';
+import { loadSeason, teamMap, kickoff, status, shownScore, activeWeek, byKickoff, liveSimTime, clockAt, addedAt } from './data.js';
 import { $, esc, logo, parseStamp, fmtDate, fmtTime, dayLabel, countdown, matchUrl } from './ui.js';
 import { STAGE_NAMES, sideTeam } from './league.js';
 import { publicPosts, renderPost, publicTalliesShown } from './news.js';
@@ -17,7 +17,7 @@ function matchRow(fx) {
   let main, note = NOTE[st] || '';
   if (sc) {
     main = `<span class="score">${sc.home}<i>–</i>${sc.away}</span>`;
-    note = st === 'live' ? `<span class="live-note"><span class="pulse"></span>${esc(clockAt(fx.result.periods, liveSimTime(fx, S)))}</span>${viewerBadge(window.hclViewers?.matches?.[fx.id])}` : 'Full time';
+    note = st === 'live' ? `<span class="live-note"><span class="pulse"></span>${esc(clockAt(fx.result.periods, liveSimTime(fx, S)))}${addedAt(fx.result.periods, liveSimTime(fx, S)) ? ` <b class="added">+${addedAt(fx.result.periods, liveSimTime(fx, S))}</b>` : ''}</span>${viewerBadge(window.hclViewers?.matches?.[fx.id])}` : 'Full time';
   } else {
     main = st === 'postponed' ? '<span class="kick pp">P–P</span>' : `<span class="kick">${esc(fmtTime(k))}</span>`;
     if (st === 'postponed' && fx.postponed_reason) note = `Postponed: ${esc(fx.postponed_reason)}`;

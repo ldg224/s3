@@ -348,6 +348,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
     c.fillStyle = this.ac; c.fillRect(x + 408, y + 12, 6, 40);
     this.pill(x + 428, y + 12, 120, 40, this.limeGrad(x + 428, y, x + 548, y), 10);
     this.text(t >= this.t1 ? 'FT' : this.clockAt(t), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: DARK });
+    if (t < this.t1) this.addedBoard(x, y, t);
     if (this.A.league) { c.globalAlpha = 0.75; c.drawImage(this.A.league, W - 110, H - 110, 60, 60); c.globalAlpha = 1; }
   }
 

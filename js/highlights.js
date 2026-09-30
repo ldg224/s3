@@ -209,12 +209,23 @@ export class HighlightsRenderer {
     for (const g of this.goals) if (g.t <= t) sc[g.team === this.home.code ? 0 : 1]++;
     return sc;
   }
+  // The clock runs on through added time (46:12, 93:56); addedAt() gives the "+4" shown under it.
   clockAt(t) {
     const p = [...this.d.periods].reverse().find(p => p.start_t <= t + 1e-6) || this.d.periods[0];
     const el = Math.max(0, t - p.start_t), base = p.period === 2 ? 45 : 0;
     const m = Math.floor(el / 60) + base, s = Math.floor(el % 60);
-    if (el > 2700) { const extra = Math.floor((el - 2700) / 60); return `${base + 45}+${extra + 1}'`; }
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  addedAt(t) {
+    const p = [...this.d.periods].reverse().find(p => p.start_t <= t + 1e-6) || this.d.periods[0];
+    return p && t - p.start_t >= 2700 && p.added_minutes ? p.added_minutes : 0;
+  }
+  // The fourth official's board under the clock of the score bug (x, y = the bug's corner).
+  addedBoard(x, y, t) {
+    const n = this.addedAt(t);
+    if (!n) return;
+    this.pill(x + 450, y + 56, 76, 32, 'rgba(15,17,21,0.9)', 8);
+    this.text(`+${n}`, x + 488, y + 81, { size: 22, weight: 900, align: 'center', colour: LIME });
   }
 
   // Draw the video frame at output time T (seconds).
@@ -935,6 +946,7 @@ export class HighlightsRenderer {
     c.fillStyle = this.ac; c.fillRect(x + 408, y + 12, 6, 40);
     this.pill(x + 428, y + 12, 120, 40, this.limeGrad(x + 428, y, x + 548, y), 10);
     this.text(this.clockAt(tSim), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: DARK });
+    this.addedBoard(x, y, tSim);
     // Corner watermark
     if (this.A.league) { c.globalAlpha = 0.75; c.drawImage(this.A.league, W - 110, H - 110, 60, 60); c.globalAlpha = 1; }
   }

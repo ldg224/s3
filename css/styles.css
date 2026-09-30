@@ -295,3 +295,4 @@ button, input, select { font: inherit; color: inherit; }
 #sb-viewers .viewers { margin: 6px 0 0; font-size: .8rem; }
 .hero-facts .fact-online b { display: flex; align-items: center; gap: 6px; color: #6ee7b7; }
 .hero-facts .fact-online .pulse { width: 7px; height: 7px; color: var(--live); }
+.live-note .added { color: #8fff06; font-weight: 900; }

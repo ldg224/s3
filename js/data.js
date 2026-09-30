@@ -65,6 +65,13 @@ export function clockAt(periods, t) {
   return `${String(Math.floor(el / 60)).padStart(2, '0')}:${String(Math.floor(el % 60)).padStart(2, '0')}`;
 }
 
+// Added time announced for the period at match-file time t, once its 45 minutes are up (else 0).
+// The clock keeps running (e.g. 93:12) and this is shown beside it as "+4", like the fourth official's board.
+export function addedAt(periods, t) {
+  const p = [...periods].reverse().find(p => p.start_t <= t + 1e-6) || periods[0];
+  return p && t - p.start_t >= 2700 && p.added_minutes ? p.added_minutes : 0;
+}
+
 export const byKickoff = (a, b) => (kickoff(a) ?? Infinity) - (kickoff(b) ?? Infinity);
 export const finished = (s, now = new Date()) => s.fixtures.filter(f => status(f, s, now) === 'ft').sort(byKickoff);
 

@@ -1,4 +1,4 @@
-import { loadSeason, teamMap, kickoff, status, shownScore, liveSimTime, liveSpeed, clockAt, ladder, finished, teamForm, resultFor, winChance, loadMatchFile } from './data.js';
+import { loadSeason, teamMap, kickoff, status, shownScore, liveSimTime, liveSpeed, clockAt, addedAt, ladder, finished, teamForm, resultFor, winChance, loadMatchFile } from './data.js';
 import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onColour, matchUrl, textColour } from './ui.js';
 import { playerCard, MatchPlayer } from './match-player.js';
 import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
@@ -26,6 +26,9 @@ function visibleTime() {
   return st === 'ft' ? Infinity : -1;
 }
 
+// Added time for the current period, as the fourth official shows it ('+4'), or ''.
+const added = t => { const n = addedAt(FX.result.periods, t); return n ? `+${n}` : ''; };
+
 // ---------- Sections ----------
 
 function scoreboard() {
@@ -35,7 +38,7 @@ function scoreboard() {
   const ord = n => n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10 * (Math.floor(n / 10) % 10 !== 1)] || 'th');
   const side = t => `<a class="sb-team" href="table.html">${logo(t, 88)}
     <span class="sb-name">${esc(t.name)}</span>${t.manager ? `<span class="sb-manager">${esc(t.manager)}</span>` : ''}${rank(t.code) ? `<span class="chip">${ord(rank(t.code))} on ladder</span>` : ''}</a>`;
-  const clock = st === 'live' ? `<span class="sb-clock" id="sb-clock">${clockAt(FX.result.periods, liveSimTime(FX, S))}</span>` : '';
+  const clock = st === 'live' ? `<span class="sb-clock" id="sb-clock">${clockAt(FX.result.periods, liveSimTime(FX, S))}</span><span class="sb-added" id="sb-added">${added(liveSimTime(FX, S))}</span>` : '';
   const cd = st === 'upcoming' && k ? `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>` : '';
   return `<section class="card scoreboard" style="--h:${esc(safeColour(H.colour))};--a:${esc(safeColour(A.colour))}">
     ${side(H)}
@@ -189,6 +192,7 @@ function tick() {
     const sc = shownScore(FX, S);
     $('#sb-score').innerHTML = `${sc.home}<span class="sep">:</span>${sc.away}`;
     const c = $('#sb-clock'); if (c) c.textContent = clockAt(FX.result.periods, liveSimTime(FX, S));
+    const ad = $('#sb-added'); if (ad) ad.textContent = added(liveSimTime(FX, S));
     const n = [...FX.result.goals, ...(FX.result.cards || [])].filter(e => e.t <= liveSimTime(FX, S)).length;
     if (n !== tick.events) { tick.events = n; $('#timeline-slot').innerHTML = timelineCard(); const rs = $('#roster-slot'); if (rs) rs.innerHTML = rosterCard(); }
   }
