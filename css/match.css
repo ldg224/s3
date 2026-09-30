@@ -31,11 +31,11 @@
 
 /* Replay */
 .replay-card { padding: 16px; }
-.replay-wrap { position: relative; border-radius: 16px; overflow: hidden; background: #061a38; box-shadow: inset 0 0 60px rgba(0,0,0,.8); }
+.replay-wrap { position: relative; border-radius: 16px; overflow: hidden; background: var(--bg); box-shadow: inset 0 0 60px rgba(0,0,0,.8); }
 .replay-wrap canvas { width: 100%; height: auto; display: block; }
 .replay-caption {
   position: absolute; left: 50%; top: 8px; transform: translateX(-50%); max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; padding: 5px 12px; border-radius: 999px;
-  background: rgba(6,26,56,.88); border: 1px solid var(--glass-border); font-weight: 800; font-size: .8rem; white-space: nowrap;
+  background: rgba(11,14,19,.88); border: 1px solid var(--glass-border); font-weight: 800; font-size: .8rem; white-space: nowrap;
   opacity: 0; transition: opacity .3s; pointer-events: none;
 }
 .replay-caption.show { opacity: 1; }
@@ -45,7 +45,7 @@
 .ctl:hover { border-color: var(--brand-2); }
 .ctl.live { color: var(--live); border-color: var(--live); }
 .replay-clock { font-variant-numeric: tabular-nums; font-weight: 900; min-width: 54px; }
-.replay-empty { min-height: 140px; display: grid; place-items: center; text-align: center; padding: 20px; color: var(--muted); background: linear-gradient(180deg, #0d47a1, #061a38); border-radius: 16px; }
+.replay-empty { min-height: 140px; display: grid; place-items: center; text-align: center; padding: 20px; color: var(--muted); background: linear-gradient(180deg, var(--surface-raised), var(--bg)); border-radius: 16px; }
 .replay-empty strong { display: block; color: var(--text); font-size: 1.1rem; margin-bottom: 6px; }
 
 /* Timeline */
@@ -75,7 +75,7 @@
 
 /* MOTM */
 .motm { display: flex; align-items: center; gap: 14px; }
-.motm .rating { margin-left: auto; font-size: 1.6rem; font-weight: 900; padding: 4px 12px; border-radius: 12px; background: #ffffff; color: #061a38; }
+.motm .rating { margin-left: auto; font-size: 1.6rem; font-weight: 900; padding: 4px 12px; border-radius: 12px; background: #ffffff; color: var(--bg); }
 
 /* Lineup tables, form */
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -88,13 +88,13 @@
 .roster .num { font-family: ui-monospace, monospace; color: var(--muted); }
 .roster .o { color: #ffffff; font-weight: 800; } .roster .d { color: #64b5f6; font-weight: 800; }
 .roster .r { font-weight: 900; text-align: right; }
-.rating-chip { padding: 1px 7px; border-radius: 6px; font-size: .75rem; font-weight: 900; color: #061a38; }
+.rating-chip { padding: 1px 7px; border-radius: 6px; font-size: .75rem; font-weight: 900; color: var(--bg); }
 .form-list { display: grid; gap: 8px; }
 .form-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid var(--glass-border); text-decoration: none; font-size: .82rem; font-weight: 700; transition: transform .2s; }
 .form-item:hover { transform: translateY(-3px) scale(1.01); }
 .form-item .res { margin-left: auto; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-weight: 900; font-size: .72rem; }
 /* W / D / L carry their letter: W filled Blue 400, D Blue 800, L outlined (docs/BRAND.md) */
-.res.W { background: #42a5f5; color: #fff; } .res.D { background: #1565c0; color: #fff; } .res.L { background: transparent; color: #bbdefb; box-shadow: inset 0 0 0 1.5px #64b5f6; }
+.res.W { background: #42a5f5; color: #fff; } .res.D { background: #1565c0; color: #fff; } .res.L { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1.5px #64b5f6; }
 @media (max-width: 767px) { .two { grid-template-columns: 1fr; } }
 
 /* Finals and suspensions */
@@ -105,7 +105,7 @@
 .pens { display: flex; gap: 5px; flex-wrap: wrap; }
 .pen { font-style: normal; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .7rem; }
 .pen.in { background: rgba(255,255,255,.14); color: #fff; }
-.pen.out { background: transparent; color: #90caf9; box-shadow: inset 0 0 0 1px rgba(144,202,249,.5); text-decoration: line-through; }
+.pen.out { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); text-decoration: line-through; }
 .susp { font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #fff; border: 1px solid rgba(255,255,255,.6); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
 /* ---------- Match player (js/match-player.js): highlights, broadcast, tactical, downloads ---------- */
 .mp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -114,10 +114,10 @@
 .mp-tabs button { padding: 7px 12px; border-radius: 9px; border: 0; background: transparent; font: inherit; font-weight: 800; font-size: .8rem; color: var(--muted); white-space: nowrap; cursor: pointer; }
 .mp-tabs button[aria-selected="true"] { background: var(--brand-grad); color: #fff; }
 .mp-tabs button[hidden] { display: none; }
-.mp-stage { position: relative; border-radius: 16px; overflow: hidden; background: #061a38; box-shadow: inset 0 0 60px rgba(0,0,0,.8); }
+.mp-stage { position: relative; border-radius: 16px; overflow: hidden; background: var(--bg); box-shadow: inset 0 0 60px rgba(0,0,0,.8); }
 .mp-stage canvas { width: 100%; height: auto; display: block; }
 .mp-stage canvas[hidden] { display: none; }
-.mp-canvas { aspect-ratio: 16 / 9; cursor: pointer; background: #061a38; }
+.mp-canvas { aspect-ratio: 16 / 9; cursor: pointer; background: var(--bg); }
 /* ---------- Full screen ----------
    .mp-screen (picture + controls) goes full screen; .mp-fs is set both for the real Fullscreen API
    and for the fallback used where it isn't available (iPhone Safari): a fixed layer over the page. */
@@ -139,10 +139,10 @@ body.mp-fs-open :has(.mp-screen.mp-fs) { transform: none !important; filter: non
 .mp-screen.mp-fs.mp-idle { cursor: none; }
 body.mp-fs-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .mp-screen.mp-fs .mp-controls { transition: none; } }
-.mp-big { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 76px; border-radius: 50%; border: 0; background: rgba(6,26,56,.72); color: #fff; font-size: 2rem; cursor: pointer; box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 10px 30px rgba(0,0,0,.5); backdrop-filter: blur(4px); }
-.mp-big:hover { background: rgba(6,26,56,.9); }
+.mp-big { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 76px; height: 76px; border-radius: 50%; border: 0; background: rgba(11,14,19,.72); color: #fff; font-size: 2rem; cursor: pointer; box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 10px 30px rgba(0,0,0,.5); backdrop-filter: blur(4px); }
+.mp-big:hover { background: rgba(11,14,19,.9); }
 .mp-big[hidden] { display: none; }
-.mp-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-weight: 700; background: #0d47a1; }
+.mp-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-weight: 700; background: var(--surface); }
 .mp-msg.err { color: #fff; } .mp-msg.err::before { content: "⚠ "; }
 .mp-msg[hidden] { display: none; }
 .mp-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }

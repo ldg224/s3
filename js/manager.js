@@ -21,7 +21,7 @@ const REMEMBER = 'hcl-manager-email', STAY = 'hcl-manager-stay';
 const shirt = p => String(p.id).slice(-2);
 const surname = p => p.name.split(' ').slice(-1)[0];
 // Brightest = best, in the brand's blues (the number itself carries the meaning).
-const ratingColour = r => (r >= 7.5 ? '#ffffff' : r >= 6.5 ? '#90caf9' : r > 0 ? '#42a5f5' : 'rgba(187,222,251,.25)');
+const ratingColour = r => (r >= 7.5 ? '#ffffff' : r >= 6.5 ? '#90caf9' : r > 0 ? '#42a5f5' : 'rgba(255,255,255,.12)');
 // News answers are saved straight away through their own relay action, so they never count as unsaved.
 const snapshot = f => JSON.stringify({ ...f, updated: null, news: null });
 const dirty = () => file && snapshot(file) !== saved;
