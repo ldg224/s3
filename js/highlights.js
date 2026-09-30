@@ -47,6 +47,12 @@ class Frames {
     for (let p = 0; p < this.n; p++) players.push([L(6 + 2 * p), L(7 + 2 * p)]);
     return { ball: inPlay ? [L(1), L(2), L(3)] : [a[1] / sc, a[2] / sc, 0], inPlay: !!a[5], holder: a[4], players };
   }
+  // Just the ball [x, y] at t (cheaper than at() when the players aren't needed).
+  ball(t) {
+    const i = this.idx(t), a = this.f[i], b = this.f[Math.min(i + 1, this.f.length - 1)], sc = this.sc;
+    const k = b[0] > a[0] && a[5] && b[5] && !(a[0] / 10 < this.half2 && b[0] / 10 >= this.half2) ? clamp((t * 10 - a[0]) / (b[0] - a[0]), 0, 1) : 0;
+    return [(a[1] + (b[1] - a[1]) * k) / sc, (a[2] + (b[2] - a[2]) * k) / sc];
+  }
 }
 
 // ---------------------------------------------------------------- cameras (pinhole)
@@ -175,8 +181,10 @@ function buildTimeline(d, clips) {
 
 // ---------------------------------------------------------------- renderer
 
+// frame(T) returns a canvas of W*scale × H*scale. Everything is drawn in W×H units on a scaled
+// context, so a smaller scale (e.g. 0.5 on phones) just renders fewer pixels. Export uses scale 1.
 export class HighlightsRenderer {
-  constructor(data, { season, fixture, assets }) {
+  constructor(data, { season, fixture, assets, scale = 1 }) {
     this.d = data; this.fr = new Frames(data); this.season = season; this.fx = fixture; this.A = assets;
     this.home = data.teams.home; this.away = data.teams.away;
     this.hc = safeColour(this.home.colour); this.ac = safeColour(this.away.colour);
@@ -186,7 +194,8 @@ export class HighlightsRenderer {
     this.segs = buildTimeline(data, this.clips);
     this.duration = this.segs[this.segs.length - 1].end;
     this.goals = data.events.filter(e => e.type === 'goal');
-    this.cv = document.createElement('canvas'); this.cv.width = W; this.cv.height = H;
+    this.scale = clamp(+scale || 1, 0.1, 2);
+    this.cv = document.createElement('canvas'); this.cv.width = Math.round(W * this.scale); this.cv.height = Math.round(H * this.scale);
     this.c = this.cv.getContext('2d');
     this.camState = new Map();
     this.trail = [];
@@ -211,6 +220,7 @@ export class HighlightsRenderer {
   // Draw the video frame at output time T (seconds).
   draw(T) {
     const s = this.segAt(T), local = T - s.start, c = this.c;
+    c.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     c.save();
     c.clearRect(0, 0, W, H);
     switch (s.type) {
@@ -853,9 +863,10 @@ export class HighlightsRenderer {
     }
   }
 
-  goalBanner(ev, t) {
+  // `hold` = seconds before the banner slides away (the broadcast view keeps it up longer).
+  goalBanner(ev, t, hold = 3.6) {
     const c = this.c, team = ev.team === this.home.code ? this.home : this.away, col = safeColour(team.colour);
-    const inK = easeOut(t / 0.45), outK = seg01(t, 3.6, 4.1), a = 1 - outK;
+    const inK = easeOut(t / 0.45), outK = seg01(t, hold, hold + 0.5), a = 1 - outK;
     if (a <= 0) return;
     const y = H - 330, h = 190;
     c.save(); c.globalAlpha = a;
@@ -1035,19 +1046,29 @@ export async function loadAssets(teams) {
   return { logos, logosAlt, league, title };
 }
 
-// Renders and encodes the video. `fileHandle` (optional) streams straight to disk.
-export async function exportVideo(renderer, { fileHandle, onProgress, onPreview, isCancelled }) {
-  const total = Math.round(renderer.duration * FPS);
-  let vcfg = { codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: FPS, avc: { format: 'avc' } };
-  if (!(await VideoEncoder.isConfigSupported(vcfg)).supported) vcfg = { ...vcfg, codec: 'avc1.4d0028' };
-  if (!(await VideoEncoder.isConfigSupported(vcfg)).supported) throw new Error("This browser can't encode H.264 video. Use Chrome or Edge.");
+// Renders and encodes the video. `renderer` is anything with `duration` (seconds) and
+// `frame(T)` returning a canvas; the video takes its size from that canvas (odd sizes lose
+// their last pixel row/column). `fileHandle` (optional) streams straight to disk.
+// `bitrate` defaults to 8 Mbit/s at 1080p, scaled by pixel count; `fps` defaults to 30.
+export async function exportVideo(renderer, { fileHandle, onProgress, onPreview, isCancelled, bitrate, fps = FPS }) {
+  const total = Math.round(renderer.duration * fps);
+  const first = renderer.frame(0);
+  const width = first.width & ~1, height = first.height & ~1;
+  bitrate = bitrate || Math.max(1_500_000, Math.round(8_000_000 * (width * height) / (W * H)));
+  // H.264 High, then Main, then Baseline, at a level big enough for this size and frame rate.
+  let vcfg = null;
+  for (const codec of ['avc1.640028', 'avc1.64002a', 'avc1.640033', 'avc1.4d0028', 'avc1.4d002a', 'avc1.42e028']) {
+    const cfg = { codec, width, height, bitrate, framerate: fps, avc: { format: 'avc' } };
+    if ((await VideoEncoder.isConfigSupported(cfg)).supported) { vcfg = cfg; break; }
+  }
+  if (!vcfg) throw new Error("This browser can't encode H.264 video. Use Chrome or Edge.");
 
   // Video only: the MP4 has no audio track.
   let writable = null;
   const target = fileHandle ? new FileSystemWritableFileStreamTarget(writable = await fileHandle.createWritable()) : new ArrayBufferTarget();
   const muxer = new Muxer({
     target, fastStart: fileHandle ? false : 'in-memory',
-    video: { codec: 'avc', width: W, height: H, frameRate: FPS },
+    video: { codec: 'avc', width, height, frameRate: fps },
   });
   let encErr = null;
   const venc = new VideoEncoder({ output: (ch, meta) => muxer.addVideoChunk(ch, meta), error: e => { encErr = e; } });
@@ -1056,9 +1077,9 @@ export async function exportVideo(renderer, { fileHandle, onProgress, onPreview,
   for (let i = 0; i < total; i++) {
     if (isCancelled?.()) { venc.close(); if (writable) await writable.abort(); throw new Error('Cancelled'); }
     if (encErr) throw encErr;
-    const cv = renderer.frame(i / FPS);
-    const vf = new VideoFrame(cv, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
-    venc.encode(vf, { keyFrame: i % (FPS * 2) === 0 });
+    const cv = renderer.frame(i / fps);
+    const vf = new VideoFrame(cv, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps), visibleRect: { x: 0, y: 0, width, height } });
+    venc.encode(vf, { keyFrame: i % (fps * 2) === 0 });
     vf.close();
     while (venc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 2));
     if (i % 15 === 0) { onProgress?.('Rendering video…', i / total); onPreview?.(cv); await new Promise(r => setTimeout(r, 0)); }
@@ -1069,3 +1090,6 @@ export async function exportVideo(renderer, { fileHandle, onProgress, onPreview,
   if (writable) { await writable.close(); return null; }
   return new Blob([target.buffer], { type: 'video/mp4' });
 }
+
+// Shared with the full-match broadcast view (js/broadcast.js).
+export { Frames, makeCam, makeCamAt, shade, clamp, lerp, easeOut, easeInOut, seg01, lastName, LIME, LIME2, YEL, DARK, FONT };

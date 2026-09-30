@@ -1,9 +1,9 @@
 import { loadSeason, teamMap, kickoff, status, shownScore, liveSimTime, liveSpeed, clockAt, ladder, finished, teamForm, resultFor, winChance, loadMatchFile } from './data.js';
 import { $, esc, logo, fmtTime, dayLabel, countdown, statusPill, safeColour, onColour, matchUrl, textColour } from './ui.js';
-import { Replay } from './replay.js';
+import { playerCard, MatchPlayer } from './match-player.js';
 import { STAGE_NAMES, sideTeam, suspensions } from './league.js';
 
-let S, T, FX, H, A, replay = null, matchData = null;
+let S, T, FX, H, A, player = null, matchData = null;
 
 const POS_ORDER = ['GK', 'DEF', 'MID', 'FWD'];
 
@@ -59,16 +59,9 @@ function winChanceCard() {
 
 function replayCard() {
   const st = status(FX, S), k = kickoff(FX);
+  if (st === 'live' || st === 'ft') return playerCard(st);
   let inner;
-  if (st === 'live' || st === 'ft') {
-    inner = `<div class="replay-wrap"><canvas id="pitch" width="1110" height="740" aria-label="Match replay"></canvas><div class="replay-caption" id="caption"></div></div>
-      <div class="replay-controls">
-        <button class="ctl" id="play">Play</button>
-        ${st === 'live' ? '<button class="ctl live" id="golive">● Live</button>' : '<select class="ctl" id="speed" aria-label="Speed"><option value="1">1x</option><option value="2">2x</option><option value="4" selected>4x</option><option value="8">8x</option><option value="16">16x</option><option value="40">40x</option></select>'}
-        <span class="replay-clock" id="rclock">00:00</span>
-        <input type="range" id="seek" min="0" max="1" step="0.1" value="0" aria-label="Match time">
-      </div>`;
-  } else if (st === 'upcoming') {
+  if (st === 'upcoming') {
     inner = `<div class="replay-empty"><div><strong>Watch it live here from kick-off</strong>${k ? `<span class="countdown" data-kickoff="${k.getTime()}">${countdown(k)}</span>` : ''}</div></div>`;
   } else if (st === 'postponed') {
     inner = `<div class="replay-empty"><div><strong>Match postponed</strong>${esc(FX.postponed_reason || 'A new date will be set soon.')}</div></div>`;
@@ -77,7 +70,7 @@ function replayCard() {
   } else {
     inner = '<div class="replay-empty"><div><strong>Kick-off not confirmed</strong>Check back once the fixture is scheduled.</div></div>';
   }
-  return `<section class="card replay-card"><h2 class="card-title">${st === 'live' ? 'Live match' : st === 'ft' ? 'Match replay' : 'Live broadcast'}${st === 'live' ? statusPill('live') : ''}</h2>${inner}</section>`;
+  return `<section class="card replay-card"><h2 class="card-title">Live broadcast</h2>${inner}</section>`;
 }
 
 function timelineCard() {
@@ -170,56 +163,21 @@ function render() {
     ${known ? `<div id="roster-slot">${rosterCard()}</div>${formCard()}` : ''}
   </div>`;
   document.title = `${H.code} v ${A.code} | HCL S3`;
+  player?.destroy(); player = null;
   if (st === 'live' || st === 'ft') startReplay(st);
 }
 
 async function startReplay(st) {
-  const cv = $('#pitch');
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#0d2817'; ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = '#9ca3af'; ctx.font = '700 22px Inter, system-ui'; ctx.textAlign = 'center'; ctx.fillText('Loading match…', cv.width / 2, cv.height / 2);
+  const msg = $('#mp-msg');
   try {
     matchData = matchData || await loadMatchFile(FX.file);
   } catch (e) {
-    ctx.fillStyle = '#0d2817'; ctx.fillRect(0, 0, cv.width, cv.height);
-    ctx.fillStyle = '#f87171'; ctx.fillText(e.message, cv.width / 2, cv.height / 2);
+    msg.textContent = e.message; msg.classList.add('err');
     return;
   }
-  if (replay) replay.destroy();
-  const periods = matchData.periods;
-  const shown = matchData.events.filter(e => ['goal', 'shot', 'save', 'card', 'penalty', 'woodwork', 'offside'].includes(e.type));
-  const names = Object.fromEntries(matchData.players.map(p => [p.id, p.name]));
-  const caption = $('#caption');
-  const label = e => e.type === 'goal' ? `GOAL! ${names[e.scorer] || ''}${e.own_goal ? ' (OG)' : ''} · ${e.score.join('-')}`
-    : e.type === 'shot' ? `Shot · ${names[e.player]} · ${e.outcome}` : e.type === 'save' ? `Save · ${names[e.player]}`
-    : e.type === 'card' ? `${e.card === 'yellow' ? '🟨' : '🟥'} ${names[e.player]}` : e.type === 'woodwork' ? 'Off the woodwork!' : e.type === 'penalty' ? 'Penalty!' : `Offside · ${names[e.player]}`;
-  replay = new Replay(cv, matchData, {
-    onFrame: t => {
-      $('#rclock').textContent = clockAt(periods, t);
-      const seek = $('#seek'); seek.value = t;
-      const recent = shown.filter(e => e.t <= t && t - e.t < 4).pop();
-      caption.classList.toggle('show', !!recent);
-      if (recent) caption.textContent = `${recent.minute}' ${label(recent)}`;
-    },
-  });
-  const seek = $('#seek');
-  seek.min = replay.t0; seek.max = replay.t1;
-  seek.oninput = e => replay.seek(+e.target.value);
-  const playBtn = $('#play');
-  const setBtn = () => { playBtn.textContent = replay.playing ? 'Pause' : 'Play'; };
-  playBtn.onclick = () => { replay.playing ? replay.pause() : replay.play(); setBtn(); };
-  $('#timeline-slot').addEventListener('click', e => { const r = e.target.closest('.tl-row'); if (r) { replay.seek(+r.dataset.t - 6); replay.play(); setBtn(); } });
-  if (st === 'live') {
-    replay.maxT = () => liveSimTime(FX, S);
-    replay.speed = liveSpeed(FX, S);
-    replay.seek(liveSimTime(FX, S));
-    replay.play();
-    $('#golive').onclick = () => { replay.speed = liveSpeed(FX, S); replay.seek(liveSimTime(FX, S)); replay.play(); setBtn(); };
-  } else {
-    replay.speed = +$('#speed').value;
-    $('#speed').onchange = e => { replay.speed = +e.target.value; };
-  }
-  setBtn();
+  if (!$('#mp')) return;   // the page re-rendered while the match was loading
+  player?.destroy();
+  player = new MatchPlayer({ S, FX, st, data: matchData, timeline: $('#timeline-slot') });
 }
 
 function tick() {
