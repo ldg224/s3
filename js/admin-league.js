@@ -9,7 +9,7 @@ import { logo, fmtTime } from './ui.js';
 import { toast, ask } from './admin-ui.js';
 import * as L from './league.js';
 
-const vals = {};                 // form values by input id; they survive re-renders (an auto-publish re-renders the tab)
+const vals = {};                 // form values by input id; they survive re-renders (publishing re-renders the tab)
 const errs = {};                 // section -> error shown inside that section
 const closed = new Set();        // collapsed sections
 

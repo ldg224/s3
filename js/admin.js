@@ -38,14 +38,13 @@ function writeHash() {
 function go(t, s) { tab = t; if (s) sub[t] = s; refresh(); }
 
 // ---------- Holds and undo ----------
-// Auto-publish waits while anything holds it: a batch simulation, an Undo toast, a tab (ctx.hold).
+// Publishing is manual (the Publish button or Ctrl+S). Holds stop it racing a batch simulation.
 
 const holds = new Set();
 function hold(key) { holds.add(key); clearTimeout(autoTimer); if (panel) showState(); }
 function release(key) { if (holds.delete(key)) scheduleAutoPublish(); if (panel) showState(); }
 
-// Run a change with an Undo toast. Nothing publishes until the toast has gone, so Undo is
-// only ever a local change and never needs a second commit (or deleted files brought back).
+// Run a change with an Undo toast. Undo is a local change: nothing is published until you press Publish.
 let undoN = 0;
 function change(label, mutate) {
   const before = structuredClone(draft), beforeUploads = new Map(uploads);
@@ -117,6 +116,9 @@ const hasDevice = () => { try { return !!localStorage.getItem(STORE); } catch { 
 
 async function gh(path, opts = {}) {
   const res = await fetch(`https://api.github.com${path}`, {
+    // GitHub lets browsers cache API answers for 60s; a cached branch tip makes the next
+    // commit build on an old parent and fail with "not a fast forward" (422).
+    cache: 'no-store',
     ...opts,
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
   });
@@ -244,7 +246,7 @@ function openPanel() {
   if (!panel) {
     panel = el(`<section class="ed-panel" aria-label="League editor">
       <div class="ed-head"><h2>League admin</h2><span class="ed-pending" role="status" aria-live="polite"></span>
-        <button class="ed-btn primary" data-publish>Publish now</button><button class="ed-btn" data-discard>Discard</button>
+        <button class="ed-btn primary" data-publish title="Publish (Ctrl+S)">Publish</button><button class="ed-btn" data-discard>Discard</button>
         <a class="ed-btn" href="index.html" target="_blank" rel="noopener">View site ↗</a>
         <button class="ed-btn" data-lock title="Lock edit mode">Lock</button></div>
       <nav class="ed-tabs" role="tablist" aria-label="Admin sections"></nav>
@@ -495,7 +497,7 @@ function fixturesTab(body) {
   };
   body.querySelector('#sim-all')?.addEventListener('click', async () => {
     const list = unplayed();
-    if (await ask({ title: `Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}?`, text: 'This can take a while. Keep this tab open; each result is kept on this device as it finishes, and everything publishes together at the end.', ok: 'Simulate' })) simulateMany(list);
+    if (await ask({ title: `Simulate ${list.length} fixture${list.length > 1 ? 's' : ''}?`, text: 'This can take a while. Keep this tab open; each result is kept on this device as it finishes. Press Publish when it’s done to put the results live.', ok: 'Simulate' })) simulateMany(list);
   });
   body.querySelector('#nf-add').onclick = () => {
     const week = +body.querySelector('#nf-week').value || 1, h = body.querySelector('#nf-home').value, a = body.querySelector('#nf-away').value;
@@ -673,7 +675,7 @@ function renderUpload(body) {
       <label class="ed-field">Kick-off<input class="ed-input" id="u-time" type="time" value="${esc(target?.time || '12:00')}"></label>
     </div>
     <div class="ed-row"><button class="ed-btn primary" id="u-save">Add to season</button><button class="ed-btn" id="u-cancel">Cancel</button></div>
-    <p class="ed-hint">Saved to the live site automatically a few seconds after you add it.</p>`;
+    <p class="ed-hint">Goes live when you press Publish.</p>`;
   const sel = body.querySelector('#u-target');
   if (!target) sel.value = '__new';
   sel.onchange = () => { uploadTarget = sel.value === '__new' ? '__new' : sel.value; renderUpload(body); };
@@ -741,7 +743,7 @@ async function simulateMany(list) {
       refresh();
     }
     bar.style.width = '100%';
-    status.innerHTML = `<span class="ed-ok">${done} match${done === 1 ? '' : 'es'} simulated${cancelled ? ' (stopped early)' : ''}.${done ? ' Saving to the live site…' : ''}</span>`;
+    status.innerHTML = `<span class="ed-ok">${done} match${done === 1 ? '' : 'es'} simulated${cancelled ? ' (stopped early)' : ''}.${done ? ' Press Publish to put the results live.' : ''}</span>`;
     if (skipped.length) err.innerHTML = `${skipped.length} skipped:<br>${skipped.map(esc).join('<br>')}`;
   } catch (e) {
     err.textContent = `${done ? `${done} simulated, then: ` : ''}${e.message}`;
@@ -882,7 +884,7 @@ function coreAttention() {
   const items = [], T = Object.fromEntries(draft.teams.map(t => [t.code, t]));
   const byState = key => draft.fixtures.filter(f => fxState(f).key === key);
   const vsList = list => list.slice(0, 3).map(f => `${nameOf(T, f.home)} v ${nameOf(T, f.away)}`).join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : '');
-  if (liveState === 'failed') items.push({ level: 'red', text: 'The last publish didn’t go through. Your changes are still here; press Publish now to try again.' });
+  if (liveState === 'failed') items.push({ level: 'red', text: 'The last publish didn’t go through. Your changes are still here; press Publish to try again.' });
   const late = byState('warn');
   if (late.length) items.push({ level: 'red', text: `${late.length} match${late.length > 1 ? 'es have' : ' has'} kicked off without a result: ${vsList(late)}.`, tab: 'fixtures', filter: 'todo', act: '⚡ Simulate them' });
   const soon = draft.fixtures.filter(f => fxState(f).key === 'up' && kickoff(f) - Date.now() < 2 * 86400000);
@@ -1031,7 +1033,7 @@ function historyTab(body) {
   if (!historyList && !historyErr) { body.innerHTML = '<div class="ed-section"><p class="ed-hint">Loading the history…</p></div>'; loadHistory(); return; }
   const when = iso => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   body.innerHTML = `<div class="ed-section"><div class="ed-row" style="justify-content:space-between"><h3>Change history</h3><button class="ed-btn small" id="hist-reload">Refresh</button></div>
-    <p class="ed-hint">Every saved change is listed here. Restore puts the league back exactly as it was then, including match files, and publishes it. You can undo a restore by restoring the version above it.</p>
+    <p class="ed-hint">Every saved change is listed here. Restore puts the league back exactly as it was then, including match files, and publishes it straight away (with anything else unpublished). You can undo a restore by restoring the version above it.</p>
     ${historyErr ? `<p class="ed-err">${esc(historyErr)}</p>` : ''}
     <div class="hist">${(historyList || []).map((c, i) => `<div class="hist-row"><div><b>${esc(c.commit.message.split('\n')[0].replace(/^Edit mode: /, ''))}</b><span class="ed-hint">${esc(when(c.commit.author.date))}${i === 0 ? ' · current version' : ''}</span></div>
       ${i === 0 ? '' : `<button class="ed-btn small" data-restore="${esc(c.sha)}" data-when="${esc(when(c.commit.author.date))}">Restore</button>`}</div>`).join('')}</div></div>`;
@@ -1053,7 +1055,7 @@ async function restoreVersion(sha, when, btn) {
     const old = await raw.json();
     // Say what restoring would actually change, before doing it.
     const what = describeChanges(draft, old, []);
-    if (!await ask({ title: `Restore the version from ${when}?`, text: 'The league goes back exactly as it was then, including match files, and publishes. You can undo this by restoring the version above it.',
+    if (!await ask({ title: `Restore the version from ${when}?`, text: 'The league goes back exactly as it was then, including match files, and is published straight away. You can undo this by restoring the version above it.',
       html: `<p><b>Compared with now:</b> ${esc(what === 'saved' ? 'no differences in fixtures, teams or players' : what)}.</p>`, ok: 'Restore', danger: true })) {
       btn.disabled = false; btn.textContent = 'Restore';
       return;
@@ -1082,6 +1084,7 @@ async function restoreVersion(sha, when, btn) {
     historyList = null;
     toast(`Restored the version from ${when}. Publishing…`, { kind: 'ok' });
     go('fixtures', 'list');
+    autoBlocked = false; publish();   // a restore is deliberate: publish it now
   } catch (e) {
     toast(`Couldn't restore: ${e.message}`, { kind: 'err' });
     btn.disabled = false; btn.textContent = 'Restore';
@@ -1314,34 +1317,33 @@ function settingsTab(body) {
 
 // ---------- Publish ----------
 //
-// Every change goes live on its own: a few seconds after the last edit it's committed to GitHub,
-// then we watch the public site until GitHub Pages is serving it. If a Pages build fails
+// Changes wait on this device until you press Publish (or Ctrl+S); then they're committed to GitHub
+// in one commit, and we watch the public site until GitHub Pages is serving it. If a Pages build fails
 // (it can when two saves land seconds apart) we ask GitHub to build again.
 
-const AUTO_DELAY = 4000;
-let publishing = false, autoTimer = null, autoBlocked = false; // blocked after a conflict until 'Publish now'
+let publishing = false, autoTimer = null, autoBlocked = false; // blocked after a conflict until Publish is pressed
 let liveState = '', liveMsg = '';   // '', 'saving', 'live', 'failed'
 
 function setState(state, msg) { liveState = state; liveMsg = msg; if (panel) showState(); }
 function showState() {
   const box = panel.querySelector('.ed-pending'), n = pendingCount();
   if (publishing || liveState === 'saving' || liveState === 'failed') box.innerHTML = liveMsg;
-  else if (n && autoBlocked) box.innerHTML = `<span class="ed-err">${n} change${n > 1 ? 's' : ''} not published. Press Publish now.</span>`;
-  else if (n && holds.size) box.innerHTML = `<span class="ed-wait">${n} change${n > 1 ? 's' : ''} waiting. ${holds.has('sim') ? 'Publishing when the simulation finishes.' : 'Publishing once the Undo option closes.'}</span>`;
-  else if (n) box.innerHTML = `<span class="ed-wait">${n} change${n > 1 ? 's' : ''}, publishing automatically…</span>`;
+  else if (n && autoBlocked) box.innerHTML = `<span class="ed-err">${n} change${n > 1 ? 's' : ''} not published. Press Publish.</span>`;
+  else if (n && holds.has('sim')) box.innerHTML = `<span class="ed-wait">${n} unpublished change${n > 1 ? 's' : ''}. Publish once the simulation finishes.</span>`;
+  else if (n) box.innerHTML = `<span class="ed-wait">${n} unpublished change${n > 1 ? 's' : ''}. Press Publish to put ${n > 1 ? 'them' : 'it'} live.</span>`;
   else box.innerHTML = liveMsg || '<span class="ed-ok">✓ Everything is live</span>';
 }
 
+// Auto-publish is off: an edit only updates the "unpublished changes" note next to Publish.
 function scheduleAutoPublish() {
   clearTimeout(autoTimer);
-  if (!token || !pendingCount() || autoBlocked || holds.size) return;
-  autoTimer = setTimeout(() => publish(), AUTO_DELAY);
   if (panel) showState();
 }
 
 async function publish() {
   clearTimeout(autoTimer);
   if (publishing || !pendingCount()) return;
+  if (holds.has('sim')) return toast('Wait for the simulation to finish, then publish.', { kind: 'info' });
   publishing = true;
   panel.querySelector('[data-publish]').disabled = true;
   const snap = structuredClone(draft), sentUploads = new Map(uploads);
@@ -1387,8 +1389,8 @@ async function publish() {
     watchLive(snap.updated);
   } catch (e) {
     setState('failed', `<span class="ed-err">Not published: ${esc(e.message)}</span>`);
-    autoBlocked = true;   // no auto-retry loop; 'Publish now' clears this
-    toast(`Publishing failed: ${e.message}. Your changes are still here and saved on this device. Press Publish now to try again.`, { kind: 'err', ms: 15000 });
+    autoBlocked = true;   // no auto-retry loop; pressing Publish clears this
+    toast(`Publishing failed: ${e.message}. Your changes are still here and saved on this device. Press Publish to try again.`, { kind: 'err', ms: 15000 });
   } finally {
     publishing = false;
     refresh();
@@ -1433,7 +1435,10 @@ function boot() {
   // An open ⋯ menu closes when you click anywhere else or press Escape.
   const closeMenus = keep => document.querySelectorAll('.ed-menu[open]').forEach(d => { if (d !== keep) d.open = false; });
   document.addEventListener('click', e => closeMenus(e.target.closest('.ed-menu')));
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(null); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeMenus(null);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && panel) { e.preventDefault(); autoBlocked = false; publish(); }
+  });
   if (token) startEditing(); else showLocked();
   window.addEventListener('beforeunload', e => { if (pendingCount() || publishing) { e.preventDefault(); e.returnValue = ''; } });
 }

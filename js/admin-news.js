@@ -294,7 +294,7 @@ export function newsTab(body, ctx) {
   if (!previewTeam || !S.teams.some(t => t.code === previewTeam)) previewTeam = S.teams[0]?.code || null;
   if (files === null && !filesLoading && !filesErr && (S.news || []).length) loadFiles(ctx);
 
-  // Keep focus and caret across re-renders (an auto-publish re-renders the tab while you type).
+  // Keep focus and caret across re-renders (publishing re-renders the tab while you type).
   const a = document.activeElement, keep = a && body.contains(a) && a.dataset.path ? { path: a.dataset.path, s: a.selectionStart, e: a.selectionEnd } : null;
   body.innerHTML = post ? postView(S, post, ctx) : listView(S, ctx);
   if (keep) {
@@ -400,7 +400,7 @@ function postView(S, p, ctx) {
     <div class="ed-row na-actions"><button class="ed-btn small" data-act="back">← All posts</button>${primary}
       <details class="na-more"><summary class="ed-btn small" aria-label="More actions">⋯</summary><div class="na-menu" role="menu">${more}</div></details></div>
     ${p.status === 'draft' ? `<div id="na-ready">${readiness(S, p, esc)}</div>` : ''}
-    ${live ? `<p class="ed-hint">This post is live: edits go out with the next publish. Changing questions after teams have answered can confuse them.</p>` : ''}
+    ${live ? `<p class="ed-hint">This post is live: edits go out when you press Publish. Changing questions after teams have answered can confuse them.</p>` : ''}
     ${tabs}
     ${view === 'responses' ? responsesView(S, p, ctx) : `
       <div class="fx-filters na-panes">${[['edit', 'Edit'], ['preview', 'Preview']].map(([k, l]) => `<button class="fx-filter" data-pane="${k}" aria-pressed="${pane === k}">${l}</button>`).join('')}</div>
@@ -668,7 +668,7 @@ function csv(S, p) {
 
 function current(ctx) { return posts(ctx.draft).find(p => p.id === sel); }
 
-// A post changed: drafts are saved on this device, live posts go out with the next publish.
+// A post changed: drafts are saved on this device, live posts go out when you press Publish.
 function saved(ctx, p) {
   if (!p) return;
   p.updated = stamp();
@@ -799,7 +799,7 @@ async function onClick(e, ctx) {
         if (problems.length) return updatePreview(ctx);
         const aud = audienceOf(S, p);
         if (!await ask({ title: `Send “${titleOf(p)}”?`, ok: 'Send',
-          text: `It goes to ${aud.length} team portal${aud.length === 1 ? '' : 's'}${p.visibility === 'public' ? ' and the public site' : ' (with a teaser on the public site)'}, and is published in a few seconds.` })) return;
+          text: `It goes to ${aud.length} team portal${aud.length === 1 ? '' : 's'}${p.visibility === 'public' ? ' and the public site' : ' (with a teaser on the public site)'}. It goes live when you press Publish.` })) return;
         const used = pathsIn(p);
         drafts = drafts.filter(x => x !== p); saveDrafts();
         p.status = 'live'; p.sent ||= stamp(); p.updated = stamp();
@@ -807,7 +807,7 @@ async function onClick(e, ctx) {
         dropDraftFiles(used);
         (S.news ||= []).push(p);
         ctx.refresh();
-        return toast('Sent. It goes live when this publish finishes.', { kind: 'ok' });
+        return toast('Sent. Press Publish to put it live.', { kind: 'ok' });
       }
       case 'close': return removal(ctx, p, `Closed “${titleOf(p)}”: no more answers or votes`, q => { q.status = 'closed'; });
       case 'reopen': p.status = 'live'; return done('Reopened.');
