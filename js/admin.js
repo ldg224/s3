@@ -311,6 +311,7 @@ function refresh() {
   body.setAttribute('aria-labelledby', `tab-${tab}`);
   body.innerHTML = '';
   body.onchange = null;
+  body.onfocusout = null;
   body.onclick = null;
   body.oninput = null;
   let target = body;
@@ -360,7 +361,7 @@ const newId = (week, h, a) => {
 
 // Fixture cards grouped by week. What each card shows depends on where the match is up to.
 const fxOpenWeeks = new Set(), fxEditing = new Set();
-let fxFilter = 'all', fxWeeksInit = false;
+let fxFilter = 'all', fxWeeksInit = false, fxRedraw = false;
 
 function fxState(f) {
   const st = status(f, draft);
@@ -469,6 +470,17 @@ function fixturesTab(body) {
       else toast(`${nameOf(T, f.home)} v ${nameOf(T, f.away)} rescheduled.`, { kind: 'ok' });
     } else f[k] = v || (k === 'week' ? null : '');
     if (k === 'week') fxOpenWeeks.add(String(v ?? 'TBA'));
+    // Date and time boxes report a change for every digit typed. Redrawing now would throw the
+    // cursor out of the box, so keep the value and redraw once you leave the box.
+    if (k === 'date' || k === 'time') { fxRedraw = true; touch(); return; }
+    refresh();
+  };
+  body.onfocusout = e => {
+    if (!fxRedraw || !e.target.closest?.('.fx-card') || !['date', 'time'].includes(e.target.dataset.k)) return;
+    // Moving straight to the other date/time box of the same card: wait until you leave that too.
+    const next = e.relatedTarget;
+    if (next?.closest?.('.fx-card') === e.target.closest('.fx-card') && ['date', 'time'].includes(next.dataset?.k)) return;
+    fxRedraw = false;
     refresh();
   };
   body.onclick = async e => {

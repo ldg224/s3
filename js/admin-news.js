@@ -307,6 +307,8 @@ export function newsTab(body, ctx) {
   body.onchange = e => onChange(e, ctx);
   body.onclick = e => onClick(e, ctx);
   body.onkeydown = e => onKey(e);
+  // A finished deadline date turns on the time box and updates the card summary.
+  body.onfocusout = e => { if (e.target.type === 'date' && e.target.dataset.path) setTimeout(() => ctx.refresh()); };   // after focus lands, so it's kept
   if (post && view === 'responses' && respTeam) {
     const ans = entry(respTeam, post.id)?.answers || {};
     for (const q of post.form?.questions || []) if (q.type === 'image' && ans[q.id]) fetchAnswerImage(ctx, ans[q.id]);
@@ -748,7 +750,8 @@ function onChange(e, ctx) {
   if (/\.map$/.test(path) && !el.value) setPath(p, path, null);
   saved(ctx, p);
   // Selects, ticks and dates change what the editor shows; text only needs the preview.
-  if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'date' || el.type === 'color') ctx.refresh();
+  // Date boxes report a change for every digit typed, so they redraw when you leave the box (onBlur).
+  if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'color') ctx.refresh();
   else updatePreview(ctx);
 }
 // Is a repo path still used by any sent post (so an unpublished upload must stay)?
