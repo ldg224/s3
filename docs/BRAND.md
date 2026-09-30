@@ -22,8 +22,9 @@ Never recolour, stretch or outline the crest, or put it on a busy photo without 
 
 ## Colour
 
-The brand colours are the Material Blue ramp and white. Page backgrounds and cards are dark neutrals
-(near-black with a slight cool tone), so blue stays special. No green, lime, gold, red, orange or purple for
+The brand colours are the Material Blue ramp and white. The page is a very dark navy and cards are a step
+lighter, so the site reads blue without being bright. Two earlier versions set the limits: bright blue
+everywhere was too much, flat near-black was too plain. No green, lime, gold, red, orange or purple for
 the league's own UI. **Team colours are the teams' own** and stay as they are (logos, kit colours, team accents).
 
 | Token | Hex | Use |
@@ -39,14 +40,14 @@ the league's own UI. **Team colours are the teams' own** and stay as they are (l
 | Blue 800 | `#1565c0` | Gradient end, raised panels |
 | Blue 900 | `#0d47a1` | Deep panels, headers |
 | Navy | `#061a38` | Text on white/light-blue fills (e.g. the LIVE pill), broadcast graphics |
-| Page | `#0b0e13` | Page background (`--bg`), not a brand colour |
-| Card | `#13171e` | Cards (`--surface`) |
-| Raised | `#1a1f28` | Hover rows, inputs, nested panels (`--surface-raised`) |
-| Grey text | `#aab4c3` / `#7d8898` | Secondary and faint text (`--muted`, `--faint`) |
+| Page | `#081225` | Page background (`--bg`): very dark navy |
+| Card | `#0e1a31` | Cards (`--surface`), with a soft Blue 600 wash at the top and a Blue 300 top edge |
+| Raised | `#15243f` | Hover rows, inputs, nested panels (`--surface-raised`) |
+| Blue-grey text | `#aebdd3` / `#7f93b0` | Secondary and faint text (`--muted`, `--faint`) |
 | White | `#ffffff` | **The accent**: headings, scores, LIVE, the most important thing on screen |
 
 Rules:
-- Background near-black, cards dark grey (`--bg`, `--surface`, `--surface-raised`). Text is white; secondary text cool grey (`--muted`).
+- Background dark navy, cards a step lighter (`--bg`, `--surface`, `--surface-raised`). Text is white; secondary text blue-grey (`--muted`). Section titles (`.card-title`) are Blue 300.
 - Blue is for brand accents: the crest, primary buttons and active tabs, links, highlights, the W chip. Don't use it for large backgrounds on the site (the hero photo and broadcast graphics are the exceptions).
 - White is the accent: use it for what matters most (LIVE, the score, the primary heading). Blue does the rest.
 - Buttons: Blue gradient (`#42a5f5` → `#1565c0`) with **white** text. Never dark text on the gradient.
