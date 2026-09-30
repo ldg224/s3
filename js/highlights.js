@@ -80,7 +80,7 @@ function makeCamAt(C, T, fovDeg) {
   };
   const proj = ([xc, yc, zc]) => [W / 2 + focal * xc / zc, H / 2 - focal * yc / zc, focal / zc];
   return {
-    focal,
+    focal, C,
     p(x, y, z = 0) { const q = toCam(x, y, z); return q[2] < NEAR ? null : proj(q); },
     // Polygon clipped against the near plane (so shapes partly behind the camera still draw).
     poly(pts) {
@@ -740,16 +740,45 @@ export class HighlightsRenderer {
       const spot = cam.p(x0 + s * 11, 34); if (spot) { c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(spot[0], spot[1], 3, 0, Math.PI * 2); c.fill(); }
     }
     const cs = cam.p(52.5, 34); if (cs) { c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(cs[0], cs[1], 3.5, 0, Math.PI * 2); c.fill(); }
-    // Advertising boards along the far touchline
-    const b1 = cam.p(-5, -3, 0), b2 = cam.p(110, -3, 0), b3 = cam.p(110, -3, 1.0), b4 = cam.p(-5, -3, 1.0);
-    if (b1 && b2 && b3 && b4) {
-      c.beginPath(); c.moveTo(b1[0], b1[1]); c.lineTo(b2[0], b2[1]); c.lineTo(b3[0], b3[1]); c.lineTo(b4[0], b4[1]); c.closePath();
-      c.fillStyle = '#0b0d11'; c.fill();
-      for (let x = 0; x < 105; x += 15) {
-        const p = cam.p(x + 7.5, -3, 0.5); if (!p) continue;
-        this.text(x % 30 === 0 ? 'HEINEKEN C LEAGUE' : 'SEASON 3', p[0], p[1] + p[2] * 0.2, { size: Math.max(8, p[2] * 0.55), weight: 900, align: 'center', colour: x % 30 === 0 ? LIME : '#fff', base: 'middle' });
-      }
+    this.drawBoards(cam);
+  }
+
+  // Advertising boards along the far touchline (y = -3, 1 m tall, facing the pitch). The branding is
+  // painted onto each 15 m panel in perspective, so it turns with the boards as the camera moves
+  // (it used to be flat screen text that always faced the camera). From behind, only the back shows.
+  drawBoards(cam) {
+    const c = this.c, Y = -3, Z = 1, X0 = -5, X1 = 110, PANEL = 15;
+    this.quad(cam, [[X0, Y, 0], [X1, Y, 0], [X1, Y, Z], [X0, Y, Z]], '#0b0d11');
+    if (cam.C && cam.C[1] <= Y) return;   // behind the boards: their back is blank
+    for (let x = X0, i = 0; x < X1; x += PANEL, i++) this.boardPanel(cam, x, Math.min(X1, x + PANEL), Y, Z, i % 2 ? 'SEASON 3' : 'HEINEKEN C LEAGUE', i % 2 ? '#ffffff' : LIME);
+  }
+  // One panel's artwork, drawn in thin vertical strips; each strip is an affine map of the image
+  // onto the projected board, which together give the perspective.
+  boardPanel(cam, xa, xb, y, z, label, colour) {
+    const art = this.boardArt(label, colour, (xb - xa) / z), c = this.c, N = 14, sw = art.width / N;
+    for (let k = 0; k < N; k++) {
+      const x = xa + (xb - xa) * k / N, x2 = xa + (xb - xa) * (k + 1) / N;
+      const tl = cam.p(x, y, z), tr = cam.p(x2, y, z), bl = cam.p(x, y, 0);
+      if (!tl || !tr || !bl) continue;
+      c.save();
+      c.transform((tr[0] - tl[0]) / sw, (tr[1] - tl[1]) / sw, (bl[0] - tl[0]) / art.height, (bl[1] - tl[1]) / art.height, tl[0], tl[1]);
+      c.drawImage(art, k * sw, 0, sw, art.height, 0, 0, sw + 0.6, art.height);   // a hair of overlap hides seams
+      c.restore();
     }
+  }
+  boardArt(label, colour, aspect) {
+    const key = `${label}|${colour}|${aspect}`;
+    this._boardArt ||= new Map();
+    if (this._boardArt.has(key)) return this._boardArt.get(key);
+    const h = 64, w = Math.round(h * aspect), cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#0b0d11'; g.fillRect(0, 0, w, h);
+    g.fillStyle = colour; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `900 ${Math.round(h * 0.62)}px ${FONT}`;
+    g.fillText(label, w / 2, h / 2 + 2, w * 0.92);
+    this._boardArt.set(key, cv);
+    return cv;
   }
 
   // Four stands of crowd around the pitch (only the faces this camera can see).

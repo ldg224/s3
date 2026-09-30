@@ -131,13 +131,26 @@ export async function findManagerTeam(season, email, pin) {
 }
 
 // Send a request to the relay ('save', 'news' or 'upload'). Resolves with the relay's JSON reply.
+// Google now and then answers with its own "Page not found" page instead of the script's reply, so
+// saves and news actions (which are safe to repeat) try again up to twice. Uploads aren't repeated.
 export async function relaySave(season, payload) {
   if (!season.manager_relay) throw new Error('Saving isn’t switched on yet. Ask the league admin to finish the manager setup.');
-  const res = await fetch(season.manager_relay, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
-  let out;
-  try { out = await res.json(); } catch { throw new Error(`The save service didn’t reply properly (${res.status}).`); }
-  if (!out.ok) throw new Error(out.error || 'Saving failed.');
-  return out;
+  const tries = payload.action === 'upload' ? 1 : 3;
+  let status = 0;
+  for (let i = 0; i < tries; i++) {
+    if (i) await new Promise(r => setTimeout(r, 1500 * i));
+    let out = null;
+    try {
+      const res = await fetch(season.manager_relay, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+      status = res.status;
+      out = await res.json();
+    } catch { continue; }   // Google's error page, or offline: try again
+    if (out.ok) return out;
+    // A retried vote or form that says "already" means the first try went through; only its reply got lost.
+    if (i && /already/i.test(out.error || '')) throw new Error('That went through. Refresh the page to see it.');
+    throw new Error(out.error || 'Saving failed.');
+  }
+  throw new Error(`The save service didn’t reply properly${status ? ` (${status})` : ''}. Please try again.`);
 }
 
 // ---------- Press ----------
