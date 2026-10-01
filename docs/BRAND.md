@@ -25,8 +25,16 @@ Never recolour, stretch or outline the crest, or put it on a busy photo without 
 The brand colours are the Material Blue ramp and white. The page is near-black with a navy undertone and cards
 are a dark slate; blue is kept for accents (section titles, the active tab, buttons, links, the hero, the
 crest). Earlier versions set the limits: bright blue everywhere was too much, flat black too plain, and
-blue-washed cards still too much. No green, lime, gold, red, orange or purple for
-the league's own UI. **Team colours are the teams' own** and stay as they are (logos, kit colours, team accents).
+blue-washed cards still too much. **Team colours are the teams' own** and stay as they are (logos, kit colours, team accents).
+
+**Blue is the theme, not a rule for everything.** The overall look (page, cards, buttons, links, active tabs,
+headings, the crest) stays vLeague blue, navy and white. Anything that carries meaning should use the colour
+that reads best, even if it isn't blue: form chips, results, player ratings, live and status markers,
+cards and bookings, warnings, charts, highlights. A page with only blue on it is flat and hard to scan. Be smart about it:
+- Use a colour where it tells you something (a win, a red card, a poor rating), not just to decorate.
+- Keep each meaning the same colour everywhere (one green for a win on every page; use the shared tokens).
+- Keep large areas (backgrounds, panels, buttons) in the brand colours; let other colours be small and bold.
+- Check it's still readable on the dark background.
 
 | Token | Hex | Use |
 |---|---|---|
@@ -49,10 +57,10 @@ the league's own UI. **Team colours are the teams' own** and stay as they are (l
 
 Rules:
 - Background near-black navy, cards dark slate (`--bg`, `--surface`, `--surface-raised`). Text is white; secondary text grey (`--muted`). Section titles (`.card-title`) are Blue 300.
-- Blue is for brand accents: the crest, primary buttons and active tabs, links, highlights, the W chip. Don't use it for large backgrounds on the site (the hero photo and broadcast graphics are the exceptions).
+- Blue is for brand accents: the crest, primary buttons and active tabs, links, highlights. Don't use it for large backgrounds on the site (the hero photo and broadcast graphics are the exceptions).
 - White is the accent: use it for what matters most (LIVE, the score, the primary heading). Blue does the rest.
 - Buttons: Blue gradient (`#42a5f5` → `#1565c0`) with **white** text. Never dark text on the gradient.
-- Not everything is blue. Things fans read with real-world colours keep them:
+- Not everything is blue (see above). Current examples:
   - results/form W/D/L: `--res-w` #22a55b green, `--res-d` #7c8594 grey, `--res-l` #e5484d red, letters kept;
   - player match ratings: green high, amber mid, red low (like FotMob/Sofascore), except **Man of the Match,
     whose rating sits on mid blue #1e88e5 with white text**;
