@@ -46,8 +46,42 @@ function checkSquad(season, code) {
   return { team, squad };
 }
 
-// A team's manager file (data/teams/<code>.json in lower case, written by the manager portal): formation, tactics,
-// chosen XI and set-piece takers. Missing or unreadable means engine defaults.
+// The vLeague app (ldg224/vLeague, Supabase) holds each club's team sheet. The league office sets a line-up deadline
+// per week; at the deadline every club's sheet is locked into week_sheets, readable by anyone from then on. Simulate
+// plays a fixture with its week's locked sheets: formation, tactics, XI and set-piece takers. A club with no locked
+// sheet gets the engine's own picks. These are the app's public URL and anon key (safe to publish).
+const VLEAGUE_DB = 'https://ywkhjpfzqtfssbxbvnbl.supabase.co/rest/v1';
+const VLEAGUE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3a2hqcGZ6cXRmc3NieGJ2bmJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NDc4ODcsImV4cCI6MjEwNjMyMzg4N30.3f2kszBjf-jP3QxKZQe4AI-NBMFmrPNiEpQIPk8K9RE';
+
+async function vleague(path) {
+  const res = await fetch(`${VLEAGUE_DB}/${path}`, { headers: { apikey: VLEAGUE_KEY, Authorization: `Bearer ${VLEAGUE_KEY}` }, cache: 'no-store' });
+  if (!res.ok) throw new Error(`The vLeague app didn't answer (error ${res.status}).`);
+  return res.json();
+}
+
+// { CODE: sheet } for a week, or an error saying why Simulate has to wait.
+async function weekSheets(week) {
+  let deadline, rows;
+  try {
+    [deadline] = await vleague(`deadlines?week=eq.${encodeURIComponent(week)}&select=*`);
+  } catch (e) {
+    throw new Error(`Couldn't read week ${week}'s line-ups from the vLeague app. ${e.message}`);
+  }
+  if (!deadline) throw new Error(`Week ${week} has no line-up deadline. Set one in the vLeague Editor (Deadlines), then simulate after it.`);
+  if (!deadline.locked_at) {
+    const at = new Date(deadline.locks_at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    throw new Error(`Week ${week}'s line-ups lock at ${at}. Simulate after that.`);
+  }
+  try {
+    rows = await vleague(`week_sheets?week=eq.${encodeURIComponent(week)}&select=*`);
+  } catch (e) {
+    throw new Error(`Couldn't read week ${week}'s line-ups from the vLeague app. ${e.message}`);
+  }
+  return Object.fromEntries(rows.map(r => [r.club, r]));
+}
+
+// A team's manager file (data/teams/<code>.json in lower case) from the old Manager Hub. From vLeague 0.6 it only
+// feeds the press effect (press answers); line-ups come from weekSheets(). Missing or unreadable means none.
 async function managerFile(code) {
   try {
     const res = await fetch(new URL(`../data/teams/${code.toLowerCase()}.json?t=${Date.now()}`, import.meta.url), { cache: 'no-store' });
@@ -102,10 +136,13 @@ export async function simulateFixture(season, fixture, { onProgress, seed } = {}
   const suspended = (suspensions(season).get(fixture.id) || []).map(s => ({ player: String(s.player), reason: s.reason }));
   const out = new Set(suspended.map(s => s.player));
   toLeague(season, [fixture.home, fixture.away], out);   // validates squads before loading anything
-  // Every team's manager file: the two playing set tactics; all of them feed the press effect
-  // (what managers said this week, and the fans / happiness carried over from earlier matches).
+  // The two clubs' team sheets, locked at the week's deadline in the vLeague app. Finals (no week) use the
+  // engine's picks.
+  const sheets = fixture.week != null && !fixture.stage ? await weekSheets(fixture.week) : {};
+  const home = sheets[fixture.home] || {}, away = sheets[fixture.away] || {};
+  // Every team's manager file feeds the press effect (what managers said this week, and the fans / happiness
+  // carried over from earlier matches).
   const files = Object.fromEntries(await Promise.all(season.teams.map(async t => [t.code, await managerFile(t.code)])));
-  const home = files[fixture.home] || {}, away = files[fixture.away] || {};
   const league = toLeague(season, [fixture.home, fixture.away], out, { [fixture.home]: home, [fixture.away]: away });
   // Press effect (docs/PRESS_EFFECT.md): a small, capped performance change for each team.
   let press = null;

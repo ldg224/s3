@@ -5,7 +5,7 @@
 
 import { loadSeason, teamMap, playerTotals, kickoff, status, ladder, finished, resultFor } from './data.js';
 import { $, esc, logo, safeColour, onColour, countdown, dayLabel, fmtTime, matchUrl } from './ui.js';
-import { FORMATIONS, TACTICS, STEPS, PRESETS, POS_ORDER, squadOf, autoLineup, normaliseTeamFile, loadTeamFile, loadTeamFiles, ratingColour, findManagerTeam, relaySave, pressQuestions } from './managers.js';
+import { POS_ORDER, squadOf, normaliseTeamFile, loadTeamFile, loadTeamFiles, ratingColour, findManagerTeam, relaySave, pressQuestions } from './managers.js';
 import { newsPane, bannerHtml, badgeCount, tickDue } from './manager-news.js';
 import { pressMeters } from './press-view.js';
 import { pressFor, nextFixture, headingInto } from './press-panels.js';
@@ -189,14 +189,9 @@ function overviewPane(pane) {
   const last = mine.filter(f => status(f, S, now) === 'ft').sort((a, b) => kickoff(b) - kickoff(a))[0];
   const row = ladder(S, finished(S, now)).find(r => r.team.code === code);
   const open = pressQuestions(S, code).filter(q => !file.press.some(p => p.id === q.id));
-  const xi = Object.keys(file.lineup).length, slots = Object.keys(FORMATIONS[file.formation]).length;
-  const preset = Object.keys(PRESETS).find(n => TACTICS.every(t => PRESETS[n][t.key] === file.tactics[t.key])) || 'Custom';
   const ord = n => n + (['st', 'nd', 'rd'][((n + 90) % 100 - 10) % 10 - 1] || 'th');
   const todo = [
-    { ok: xi === slots, text: xi === slots ? `Starting XI picked (${file.formation})` : `Pick your starting XI (${xi}/${slots} chosen)`, go: 'lineup' },
-    { ok: file.bench.length > 0, text: file.bench.length ? `${file.bench.length} substitutes on the bench` : 'Pick some substitutes', go: 'lineup' },
-    { ok: !!file.captain, text: file.captain ? 'Captain chosen' : 'Choose a captain', go: 'tactics' },
-    { ok: true, text: `Game plan: ${preset}`, go: 'tactics' },
+    { ok: true, text: 'Team, tactics and set pieces: in the vLeague app (My club)', go: 'lineup' },
     { ok: !open.length, text: open.length ? `${open.length} question${open.length > 1 ? 's' : ''} from the media waiting` : 'No media questions waiting', go: 'media' },
     { ok: !dirty(), text: dirty() ? 'You have unsaved changes' : (file.updated ? `Everything saved (${new Date(file.updated + 'Z').toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })})` : 'Nothing saved yet'), go: null },
   ];
@@ -236,114 +231,28 @@ function extraPane(pane, fn) {
 }
 
 // ---------- Lineup ----------
+// From vLeague 0.6 the XI, formation, tactics and set pieces are set in the vLeague app (My club) and lock at each
+// week's deadline; Simulate reads them from there. This hub keeps press, news and the squad until they move too.
+
+const VLEAGUE_CLUB = 'https://ldg224.github.io/vLeague/club.html';
+const movedCard = what => `<section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">${what}</h2>
+  <p style="margin:0">Pick your team in the vLeague app, under My club. It locks at each week's deadline.</p>
+  <div class="chips"><a class="btn" href="${VLEAGUE_CLUB}">Open My club</a></div></section>`;
 
 function lineupPane(pane) {
-  const squad = squadOf(S, me.team), P = Object.fromEntries(squad.map(p => [p.id, p])), st = stats(), t = T[me.team];
-  const col = safeColour(t.colour), on = onColour(col);
-  const slots = FORMATIONS[file.formation];
-  const inXI = new Set(Object.values(file.lineup));
-  const lines = `<div class="ln" style="left:0;right:0;top:50%;border-width:2px 0 0"></div>
-    <div class="ln" style="left:50%;top:50%;width:26%;aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%)"></div>
-    <div class="ln" style="left:22%;right:22%;bottom:0;height:16%;border-bottom:0"></div><div class="ln" style="left:36%;right:36%;bottom:0;height:6%;border-bottom:0"></div>
-    <div class="ln" style="left:22%;right:22%;top:0;height:16%;border-top:0"></div><div class="ln" style="left:36%;right:36%;top:0;height:6%;border-top:0"></div>`;
-  const slotHtml = Object.entries(slots).map(([name, s]) => {
-    const p = P[file.lineup[name]], r = p ? st(p.id).avg : 0;
-    return `<button class="pslot ${p ? '' : 'empty'} ${picking === name ? 'picked' : ''}" data-slot="${name}" style="left:${s.x}%;bottom:${s.y}%;--tc:${esc(col)};--on:${on}" aria-label="${name}: ${p ? esc(p.name) : 'empty'}">
-      <span class="shirt">${p ? esc(shirt(p)) : '+'}${p && file.captain === p.id ? '<span class="cap">C</span>' : ''}${r ? `<span class="rt">${r.toFixed(1)}</span>` : ''}${p && p.position !== s.want ? '<span class="oop" title="Out of position"></span>' : ''}</span>
-      <span class="nm">${p ? esc(surname(p)) : 'Pick'}</span><span class="sl">${name}</span></button>`;
-  }).join('');
-  const bench = file.bench.map(id => P[id]).filter(Boolean);
-  const spare = squad.filter(p => !inXI.has(p.id) && !file.bench.includes(p.id));
-  const row = (p, act, tag) => `<button class="prow" data-${act}="${esc(p.id)}"><span class="pos">${p.position}</span><span class="nm">${esc(p.name)}</span>${tag ? `<span class="tag">${tag}</span>` : ''}<span class="od"><span class="o">${p.offense}</span>/<span class="d">${p.defense}</span></span><span class="rt" style="color:${ratingColour(st(p.id).avg)}">${st(p.id).avg ? st(p.id).avg.toFixed(1) : '–'}</span></button>`;
-  const avgXI = (() => { const rs = [...inXI].map(id => st(id).avg).filter(Boolean); return rs.length ? (rs.reduce((a, b) => a + b, 0) / rs.length).toFixed(2) : '–'; })();
-  pane.innerHTML = `<div class="mg-lineup">
-    <section class="card stack" style="gap:14px">
-      <div class="chips">${Object.keys(FORMATIONS).map(f => `<button class="chip-btn" data-form="${f}" aria-pressed="${f === file.formation}">${f}</button>`).join('')}</div>
-      <div class="pitch2d">${lines}${slotHtml}</div>
-      <div class="chips" style="justify-content:space-between;align-items:center"><span class="muted" style="font-size:.8rem">Starting XI season average: <b style="color:var(--text)">${avgXI}</b>. Tap a player to change them.</span>
-        <button class="btn small" id="auto">Auto-pick best XI</button></div>
-    </section>
-    <aside class="stack">
-      <section class="card"><h2 class="card-title">Bench <span>${bench.length}/7</span></h2><div class="plist">${bench.map(p => row(p, 'unbench', 'Remove')).join('') || '<p class="empty" style="padding:6px">No substitutes picked.</p>'}</div></section>
-      <section class="card"><h2 class="card-title">Not in the squad</h2><div class="plist">${spare.map(p => row(p, 'bench', bench.length < 7 ? '+ Bench' : '')).join('') || '<p class="empty" style="padding:6px">Everyone is involved.</p>'}</div></section>
-    </aside></div>`;
-  pane.onclick = e => {
-    const f = e.target.closest('[data-form]'), s = e.target.closest('[data-slot]'), b = e.target.closest('[data-bench]'), u = e.target.closest('[data-unbench]');
-    if (f) setFormation(f.dataset.form);
-    else if (s) openPicker(s.dataset.slot);
-    else if (e.target.closest('#auto')) { file.lineup = autoLineup(file.formation, squad); file.bench = file.bench.filter(id => !Object.values(file.lineup).includes(id)); changed(); lineupPane(pane); }
-    else if (b && file.bench.length < 7) { file.bench.push(b.dataset.bench); changed(); lineupPane(pane); }
-    else if (u) { file.bench = file.bench.filter(id => id !== u.dataset.unbench); changed(); lineupPane(pane); }
-  };
-}
-
-// Changing formation keeps players in slots of the same name, then fills the gaps sensibly.
-function setFormation(f) {
-  if (f === file.formation) return;
-  const squad = squadOf(S, me.team), old = file.lineup, keep = {};
-  for (const name of Object.keys(FORMATIONS[f])) if (old[name]) keep[name] = old[name];
-  const leftovers = Object.values(old).filter(id => !Object.values(keep).includes(id));
-  const P = Object.fromEntries(squad.map(p => [p.id, p]));
-  for (const [name, s] of Object.entries(FORMATIONS[f])) {
-    if (keep[name]) continue;
-    const i = leftovers.findIndex(id => P[id]?.position === s.want);
-    keep[name] = leftovers.splice(i >= 0 ? i : 0, 1)[0];
-    if (!keep[name]) delete keep[name];
-  }
-  file.formation = f;
-  file.lineup = keep;
-  changed();
-  lineupPane($('#pane'));
-}
-
-function openPicker(slotName) {
-  const squad = squadOf(S, me.team), st = stats(), want = FORMATIONS[file.formation][slotName].want;
-  const where = id => Object.entries(file.lineup).find(([, v]) => v === id)?.[0] || (file.bench.includes(id) ? 'Bench' : '');
-  const list = [...squad].sort((a, b) => (b.position === want) - (a.position === want) || POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position) || st(b.id).avg - st(a.id).avg);
-  const back = document.createElement('div');
-  back.className = 'sheet-back';
-  back.innerHTML = `<div class="sheet" role="dialog" aria-label="Pick a player for ${slotName}"><h3>${slotName} <span class="muted" style="font-weight:600;font-size:.8rem">· best suited: ${want}</span></h3>
-    <div class="plist">${list.map(p => `<button class="prow" data-pick="${esc(p.id)}"><span class="pos">${p.position}</span><span class="nm">${esc(p.name)}</span>${where(p.id) ? `<span class="tag">${where(p.id)}</span>` : ''}<span class="od"><span class="o">${p.offense}</span>/<span class="d">${p.defense}</span></span><span class="rt" style="color:${ratingColour(st(p.id).avg)}">${st(p.id).avg ? st(p.id).avg.toFixed(1) : '–'}</span></button>`).join('')}</div>
-    <div class="chips">${file.lineup[slotName] ? '<button class="btn small" data-clear>Leave empty</button>' : ''}<button class="btn small" data-close>Cancel</button></div></div>`;
-  document.body.appendChild(back);
-  const close = () => back.remove();
-  back.onclick = e => {
-    if (e.target === back || e.target.closest('[data-close]')) return close();
-    if (e.target.closest('[data-clear]')) { delete file.lineup[slotName]; close(); changed(); lineupPane($('#pane')); return; }
-    const pick = e.target.closest('[data-pick]');
-    if (!pick) return;
-    const id = pick.dataset.pick, from = Object.entries(file.lineup).find(([, v]) => v === id)?.[0], current = file.lineup[slotName];
-    if (from) { if (current) file.lineup[from] = current; else delete file.lineup[from]; }   // swap places
-    file.lineup[slotName] = id;
-    file.bench = file.bench.filter(b => b !== id);
-    close(); changed(); lineupPane($('#pane'));
-  };
+  pane.innerHTML = movedCard('Line-up');
+  pane.onclick = null;
 }
 
 // ---------- Tactics ----------
 
 function tacticsPane(pane) {
-  const squad = squadOf(S, me.team);
-  const seg = t => `<div class="tac"><div class="tac-head">${t.label}<span>${STEPS.indexOf(file.tactics[t.key]) === 2 ? 'Balanced' : file.tactics[t.key] < 0.5 ? t.lo : t.hi}</span></div>
-    <div class="seg" data-tac="${t.key}">${STEPS.map(v => `<button data-v="${v}" aria-pressed="${file.tactics[t.key] === v}" aria-label="${t.label} ${v * 100}%"></button>`).join('')}</div>
-    <div class="seg-ends"><span>${t.lo}</span><span>${t.hi}</span></div></div>`;
-  const picker = (key, label) => `<label class="field">${label}<select class="select" data-role="${key}"><option value="">Automatic</option>${squad.map(p => `<option value="${esc(p.id)}"${file[key] === p.id ? ' selected' : ''}>${esc(p.name)} (${p.position})</option>`).join('')}</select></label>`;
-  pane.innerHTML = `<div class="stack">
-    <section class="card stack" style="gap:16px"><h2 class="card-title" style="margin:0">Game plan</h2>
-      <div class="chips">${Object.keys(PRESETS).map(n => `<button class="chip-btn" data-preset="${esc(n)}" aria-pressed="${TACTICS.every(t => PRESETS[n][t.key] === file.tactics[t.key])}">${esc(n)}</button>`).join('')}</div>
-      <div class="grid2">${TACTICS.map(seg).join('')}</div>
-      <p class="muted" style="font-size:.78rem;margin:0">These settings change how your team plays in simulated matches.</p></section>
-    <section class="card stack" style="gap:12px"><h2 class="card-title" style="margin:0">Captain and set pieces</h2>
-      <div class="grid2">${picker('captain', 'Captain')}${picker('penalties', 'Penalty taker')}${picker('freekicks', 'Free kicks')}${picker('corners', 'Corners')}</div></section>
+  pane.innerHTML = `<div class="stack">${movedCard('Tactics and set pieces')}
     <section class="card stack" style="gap:10px"><h2 class="card-title" style="margin:0">Team news</h2>
       <label class="field">A message to fans, shown in the press room<textarea class="textarea" id="message" maxlength="500" placeholder="e.g. Injury update, a word for the fans, a warning to Saturday's opponents…">${esc(file.message)}</textarea></label></section>
   </div>`;
-  pane.onclick = e => {
-    const v = e.target.closest('[data-v]'), pr = e.target.closest('[data-preset]');
-    if (v) { file.tactics[v.closest('[data-tac]').dataset.tac] = +v.dataset.v; changed(); tacticsPane(pane); }
-    if (pr) { file.tactics = { ...PRESETS[pr.dataset.preset] }; changed(); tacticsPane(pane); }
-  };
-  pane.onchange = e => { const r = e.target.dataset.role; if (r) { file[r] = e.target.value || null; changed(); } };
+  pane.onclick = null;
+  pane.onchange = null;
   pane.querySelector('#message').oninput = e => { file.message = e.target.value.slice(0, 500); changed(); };
 }
 
