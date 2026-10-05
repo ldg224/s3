@@ -122,7 +122,7 @@ export class MatchPlayer {
     this.tactical = new Replay(this.$('#pitch'), this.data, {
       onFrame: t => {
         if (this.view !== 'tactical' || !this.tactical) return;   // the first frame is drawn inside the constructor
-        this.t = t; this.syncUi();
+        this.t = t; if (this.st === "live") this.tactical.speed = liveSpeed(this.FX, this.S, t); this.syncUi();
         const recent = shown.filter(e => e.t <= t && t - e.t < 4).pop();
         cap.classList.toggle('show', !!recent);
         if (recent) cap.textContent = `${recent.minute}' ${label(recent)}`;
@@ -149,7 +149,7 @@ export class MatchPlayer {
     const list = this.marks().filter(m => m.t <= now);
     if (this._marks === list.length) return;
     this._marks = list.length;
-    this.$('#mp-marks').innerHTML = list.map(m => `<i class="mk mk-${m.type}" style="left:${((m.t - a) / (b - a || 1)) * 100}%" title="${esc(m.label)}"></i>`).join('');
+    this.$('#mp-marks').innerHTML = list.map(m => `<i class="mk mk-${m.type}${m.card ? ' mk-' + m.card : ''}" style="left:${((m.t - a) / (b - a || 1)) * 100}%" title="${esc(m.label)}"></i>`).join('');
   }
   fullRange() {
     if (this.view === 'highlights') return this.range();
@@ -162,7 +162,7 @@ export class MatchPlayer {
         label: s.clip.kind === 'goal' ? `Goal: ${this.names[s.clip.e.scorer] || ''}` : s.clip.kind }));
     }
     if (this.view === 'broadcast' && this.renderer('broadcast').markers) return this.renderer('broadcast').markers;
-    return this.data.events.filter(e => e.type === 'goal' || e.type === 'card').map(e => ({ t: e.t, type: e.type, label: e.type === 'goal' ? `${e.minute}' ${this.names[e.scorer] || ''}` : `${e.minute}' ${this.names[e.player] || ''}` }));
+    return this.data.events.filter(e => e.type === 'goal' || e.type === 'card').map(e => ({ t: e.t, type: e.type, card: e.card === 'second_yellow' ? 'second_yellow' : e.card === 'red' ? 'red' : undefined, label: e.type === 'goal' ? `${e.minute}' ${this.names[e.scorer] || ''}` : `${e.minute}' ${this.names[e.player] || ''}` }));
   }
   syncUi() {
     this.drawMarks();
@@ -204,7 +204,7 @@ export class MatchPlayer {
       const v = e.target.closest('[data-view]');
       if (v) { this.pause(); return this.show(v.dataset.view); }
       if (e.target.closest('#mp-play, #mp-big')) return (this.view === 'tactical' ? this.tactical?.playing : this.playing) ? this.pause() : this.play();
-      if (e.target.closest('#mp-live')) { this.speed = liveSpeed(this.FX, this.S); if (this.tactical) this.tactical.speed = this.speed; this.seek(liveSimTime(this.FX, this.S)); return this.play(); }
+      if (e.target.closest("#mp-live")) { this.seek(liveSimTime(this.FX, this.S)); return this.play(); }
       if (e.target.closest('#mp-full')) return this.fullscreen();
       // Full screen with the controls hidden: the first tap only brings them back.
       if (this._tapWoke && e.target.closest('.mp-stage')) { this._tapWoke = false; return; }
@@ -290,7 +290,7 @@ export class MatchPlayer {
       // timeline on the page use). Adding up frame times drifted behind (slow first frames, a tab in
       // the background), so the page showed goals before the video did.
       if (this.follow && this.st === 'live' && this.view !== 'highlights') this.t = liveSimTime(this.FX, this.S);
-      else this.t += dt * this.speed;
+      else this.t += dt * (this.st === "live" && this.view !== "highlights" ? liveSpeed(this.FX, this.S, this.t) : this.speed);
       if (this.t >= b) { this.t = b; if (this.view === 'highlights' || this.st !== 'live') this.playing = false; }
       this.dirty = true;
     }

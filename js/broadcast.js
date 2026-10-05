@@ -38,7 +38,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
     this.buildDirector();
     this.markers = [
       ...this.goals.map(g => ({ t: g.t, type: 'goal', team: g.team, label: `${g.minute}' ${this.names[g.scorer] || ''}${g.own_goal ? ' (OG)' : ''}` })),
-      ...this.cards.map(k => ({ t: k.e.t, type: 'card', team: k.e.team, card: k.colour, label: `${k.e.minute}' ${k.colour === 'yellow' ? 'Yellow' : 'Red'} card: ${this.names[k.e.player] || ''}` })),
+      ...this.cards.map(k => ({ t: k.e.t, type: 'card', team: k.e.team, card: k.second ? 'second_yellow' : k.colour, label: `${k.e.minute}' ${k.second ? 'Second yellow, red' : k.colour === 'yellow' ? 'Yellow' : 'Red'} card: ${this.names[k.e.player] || ''}` })),
       ...(P.length > 1 ? [{ t: P[0].end_t, type: 'ht', label: 'Half-time' }] : []),
       { t: this.t1, type: 'ft', label: 'Full-time' },
     ].sort((a, b) => a.t - b.t);
@@ -81,7 +81,7 @@ export class BroadcastRenderer extends HighlightsRenderer {
       const f = [...this.fouls].reverse().find(f => f.player === e.player && f.t <= e.t + 0.01 && e.t - f.t < 3) || { t: e.t, x: e.x, y: e.y };
       let up = f.t + 1.5;
       for (let t = f.t; t < f.t + 5; t += 0.1) { const r = this.refPos(t); if (Math.hypot(r[0] - f.x, r[1] - f.y) < 3.5) { up = t + 0.6; break; } }
-      return { t: Math.max(up, e.t), until: Math.max(up, e.t) + 3.8, colour: e.card === 'yellow' ? 'yellow' : 'red', player: e.player, e };
+      return { t: Math.max(up, e.t), until: Math.max(up, e.t) + 3.8, colour: e.card === 'yellow' ? 'yellow' : 'red', second: e.card === 'second_yellow', player: e.player, e };
     });
   }
   refPos(t) {
@@ -335,6 +335,15 @@ export class BroadcastRenderer extends HighlightsRenderer {
     if (this.A.league && Math.abs(k - 0.5) < 0.3) { c.save(); c.globalAlpha = 1 - Math.abs(k - 0.5) / 0.3; c.drawImage(this.A.league, W / 2 - 80, H / 2 - 80, 160, 160); c.restore(); }
   }
 
+  // Small red cards above a team's name on the score bug, one per player sent off so far.
+  redCards(t, code, x, y) {
+    const n = this.cards.filter(k => k.colour === 'red' && k.e.team === code && k.t <= t).length, c = this.c;
+    for (let i = 0; i < n; i++) {
+      c.fillStyle = '#e53935'; c.fillRect(x + i * 14, y, 10, 14);
+      c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1.5; c.strokeRect(x + i * 14, y, 10, 14);
+    }
+  }
+
   // Score bug with the match clock (top left) and the league mark (bottom right).
   bug(t) {
     const c = this.c, sc = this.scoreAt(t), x = 60, y = 50, h = 64;
@@ -345,6 +354,8 @@ export class BroadcastRenderer extends HighlightsRenderer {
     this.pill(x + 184, y + 10, 124, 44, '#ffffff', 10);
     this.text(`${sc[0]} - ${sc[1]}`, x + 246, y + 44, { size: 32, weight: 900, align: 'center', colour: DARK });
     this.text(this.away.code, x + 322, y + 44, { size: 32, weight: 900 });
+    this.redCards(t, this.home.code, x + 88, y + 4);
+    this.redCards(t, this.away.code, x + 322, y + 4);
     c.fillStyle = this.ac; c.fillRect(x + 408, y + 12, 6, 40);
     this.pill(x + 428, y + 12, 120, 40, this.limeGrad(x + 428, y, x + 548, y), 10);
     this.text(t >= this.t1 ? 'FT' : this.clockAt(t), x + 488, y + 42, { size: 26, weight: 900, align: 'center', colour: '#fff' });
