@@ -140,4 +140,4 @@ offsides, distance_km.
 `stats.players[id]`: minutes, goals, own_goals, assists, shots, shots_on_target, xg,
 passes, passes_completed, key_passes, crosses, touches, take_ons, tackles, tackles_won,
 interceptions, clearances, blocks, aerials_won, fouls, fouled, yellow, red, offsides,
-miscontrols, saves, goals_conceded, distance_km, rating (FotMob-style 3.0-10.0).
+miscontrols, saves, goals_conceded, distance_km, rating (FotMob-style 3.0-9.9; diminishing returns above 7).

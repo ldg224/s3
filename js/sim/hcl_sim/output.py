@@ -1,5 +1,6 @@
 """Builds the match file: metadata, line-ups, events, statistics and position frames."""
 
+import math
 from datetime import datetime, timezone
 
 from . import __version__
@@ -84,6 +85,14 @@ def _player_stats(m):
     return stats
 
 
+def shape_rating(r):
+    """Diminishing returns above 7: a good game is 7.5-8.5, a brace about 9, and 10.0 is out of reach
+    (like FotMob, where 10 is practically never given). Below 7 the raw score is kept as it is."""
+    if r <= 7.0:
+        return r
+    return min(9.9, 7.0 + 3.0 * (1 - math.exp(-(r - 7.0) / 2.2)))
+
+
 def _rating(p, s, m):
     """FotMob-style 1-10 match rating built from the player's contributions."""
     won = m.score[p.side] > m.score[1 - p.side]
@@ -99,7 +108,7 @@ def _rating(p, s, m):
     elif p.line == 'DEF':
         r -= 0.1 * s['goals_conceded']
     r += 0.2 if won else -0.2 if lost else 0.0
-    return round(max(3.0, min(10.0, r)), 1)
+    return round(max(3.0, shape_rating(r)), 1)
 
 
 def _team_stats(m, pstats):
