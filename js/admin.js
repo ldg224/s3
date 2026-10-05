@@ -1232,11 +1232,16 @@ function teamsTab(body) {
     <p class="ed-hint">Open a team to edit it. Logos are optional PNGs (square, transparent background works best).</p>
     <div class="team-cards">${draft.teams.map(card).join('') || '<p class="ed-hint">No teams yet.</p>'}</div>
     <details class="team-card"${openTeams.has('__new') ? ' open' : ''} data-code="__new"><summary><b>+ Add a team</b></summary><div class="team-body">
-      <div class="ed-row"><label class="ed-field" style="width:90px">Code<input class="ed-input" id="nt-code" maxlength="4" placeholder="ABC"></label>
-        <label class="ed-field" style="flex:1 1 160px">Team name<input class="ed-input" id="nt-name"></label>
+      <div class="ed-row nt-single"><label class="ed-field" style="flex:1 1 160px">Team name<input class="ed-input" id="nt-name"></label>
+        <label class="ed-field" style="width:90px">Code<input class="ed-input" id="nt-code" maxlength="4" placeholder="auto"></label>
         <label class="ed-field" style="flex:1 1 140px">Manager<input class="ed-input" id="nt-man"></label>
         <label class="ed-field">Colour<input type="color" id="nt-col" value="#1e88e5"></label>
-        <button class="ed-btn small primary" style="align-self:end" id="nt-add">Add team</button></div></div></details></div>
+        <button class="ed-btn small primary" style="align-self:end" id="nt-add">Add team</button></div>
+      <p class="ed-hint">The code fills in itself. Press Enter to add and carry straight on to the next team.</p>
+      <div class="ed-sub"><h4>Add several at once</h4>
+        <p class="ed-hint">One team per line: <code>Name</code>, <code>CODE, Name</code> or <code>CODE, Name, Manager</code>. Codes and colours are chosen for you if left out; change them afterwards.</p>
+        <textarea class="ed-input" id="nt-bulk" rows="5" style="width:100%" placeholder="Northside FC&#10;WST, Westgate United, Sam&#10;Harbour Town"></textarea>
+        <div class="ed-row" style="justify-content:flex-end"><button class="ed-btn small primary" id="nt-bulk-add">Add all</button></div></div></div></details></div>
     <div class="ed-section"><h3>Ask every manager</h3>
       ${qsFor('all').map(q => `<div class="q-row"><span>${esc(q.q)}</span><button class="ed-btn small danger" data-act="del-q" data-q="${esc(q.id)}" aria-label="Delete question">✕</button></div>`).join('')}
       <div class="ed-row"><input class="ed-input" style="flex:1 1 240px" id="q-all" placeholder="A question for all managers…" maxlength="300"><button class="ed-btn small" data-act="add-q-all">Ask all</button></div></div>`;
@@ -1311,14 +1316,52 @@ function teamsTab(body) {
     }
     if (act === 'reinstate') change(`${t.name} reinstated.`, () => { delete t.withdrawn; });
   };
-  body.querySelector('#nt-add').onclick = () => {
-    const code = body.querySelector('#nt-code').value.trim().toUpperCase(), name = body.querySelector('#nt-name').value.trim();
-    if (!/^[A-Z0-9]{2,4}$/.test(code)) return toast('Use a 2-4 letter team code.', { kind: 'err' });
-    if (draft.teams.some(t => t.code === code)) return toast('That code is already used.', { kind: 'err' });
-    if (!name) return toast('Enter the team name.', { kind: 'err' });
+  // Suggest a unique 3-letter code from a team name: initials of long names, else the first letters.
+  const suggestCode = (name, taken) => {
+    const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+    const letters = words.join('');
+    const tries = [words.length >= 3 ? words.map(w => w[0]).join('').slice(0, 4) : '', letters.slice(0, 3), letters.slice(0, 4), words.map(w => w[0]).join('')]
+      .filter(c => c.length >= 2);
+    for (const c of tries) if (!taken.has(c)) return c;
+    const base = (tries[1] || 'TM').slice(0, 2);
+    for (let n = 1; n < 100; n++) if (!taken.has(base + n)) return base + n;
+    return '';
+  };
+  const palette = ['#1e88e5', '#e53935', '#43a047', '#fb8c00', '#8e24aa', '#00acc1', '#fdd835', '#6d4c41', '#d81b60', '#546e7a'];
+  const nameEl = body.querySelector('#nt-name'), codeEl = body.querySelector('#nt-code');
+  nameEl.oninput = () => { if (!codeEl.dataset.touched) codeEl.value = suggestCode(nameEl.value, new Set(draft.teams.map(t => t.code))); };
+  codeEl.oninput = () => { codeEl.dataset.touched = codeEl.value ? '1' : ''; };
+  const addOne = () => {
+    const code = codeEl.value.trim().toUpperCase(), name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return toast('Enter the team name.', { kind: 'err' }); }
+    if (!/^[A-Z0-9]{2,4}$/.test(code)) { codeEl.focus(); return toast('Use a 2-4 letter team code.', { kind: 'err' }); }
+    if (draft.teams.some(t => t.code === code)) { codeEl.focus(); return toast('That code is already used.', { kind: 'err' }); }
     draft.teams.push({ code, name, manager: body.querySelector('#nt-man').value.trim(), colour: body.querySelector('#nt-col').value });
-    openTeams.delete('__new'); openTeams.add(code);
+    // Stay on the form, ready for the next team.
+    openTeams.add('__new');
     refresh();
+    toast(`${name} added.`, { kind: 'ok' });
+    document.querySelector('#nt-name')?.focus();
+  };
+  body.querySelector('#nt-add').onclick = addOne;
+  body.querySelector('.nt-single').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addOne(); } };
+  body.querySelector('#nt-bulk-add').onclick = () => {
+    const lines = body.querySelector('#nt-bulk').value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return body.querySelector('#nt-bulk').focus();
+    const taken = new Set(draft.teams.map(t => t.code)), added = [], skipped = [];
+    for (const line of lines) {
+      // "Name", "CODE, Name" or "CODE, Name, Manager"
+      const parts = line.split(/[,\t]/).map(s => s.trim());
+      let code, name, manager = '';
+      if (parts.length >= 2 && /^[A-Za-z0-9]{2,4}$/.test(parts[0])) [code, name, manager = ''] = parts; else [name, manager = ''] = parts;
+      code = (code || suggestCode(name, taken)).toUpperCase();
+      if (!name || !/^[A-Z0-9]{2,4}$/.test(code) || taken.has(code)) { skipped.push(line); continue; }
+      taken.add(code);
+      draft.teams.push({ code, name, manager, colour: palette[(draft.teams.length) % palette.length] });
+      added.push(name);
+    }
+    if (added.length) { openTeams.add('__new'); refresh(); }
+    toast(added.length ? `${added.length} team${added.length > 1 ? 's' : ''} added.${skipped.length ? ` Skipped ${skipped.length} (bad or duplicate code).` : ''}` : 'No teams added: check the codes.', { kind: added.length ? 'ok' : 'err' });
   };
 }
 
